@@ -1,16 +1,40 @@
-import { Schema, model, Document } from "mongoose";
+import { Schema, model, Document, Types } from "mongoose";
+
+export const WING_NAMES = [
+  "FaithAndGrowth",
+  "FamilyAndParenting",
+  "SistersInBusiness",
+  "HealthAndWellness",
+  "SkillsExchange",
+  "ProjectTasks",
+  "General",
+] as const;
+
+export type WingNameType = (typeof WING_NAMES)[number];
+
+export interface IPostComment {
+  _id?: Types.ObjectId;
+  commenterId: Types.ObjectId;
+  comment: string;
+  createdAt: Date;
+}
+
+export interface IPostReport {
+  reporterId: Types.ObjectId;
+  reason: string;
+  createdAt: Date;
+}
 
 export interface IPost extends Document {
-  authorId: Schema.Types.ObjectId; // Linked to User model
-  wingName: string; // e.g., 'Entrepreneurship', 'Education', 'General', 'Dawah'
+  authorId: Types.ObjectId;
+  wingName: WingNameType;
   content: string;
-  mediaUrls: string[]; // Cloudinary image or video URLs
-  likes: Schema.Types.ObjectId[]; // Array of User IDs who liked
-  comments: {
-    commenterId: Schema.Types.ObjectId;
-    comment: string;
-    createdAt: Date;
-  }[];
+  mediaUrls: string[];
+  likes: Types.ObjectId[];
+  comments: Types.DocumentArray<IPostComment & Types.Subdocument>;
+  isDeleted: boolean;
+  reportCount: number;
+  reports: IPostReport[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -18,7 +42,12 @@ export interface IPost extends Document {
 const PostSchema = new Schema<IPost>(
   {
     authorId: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    wingName: { type: String, required: true, default: "General" },
+    wingName: {
+      type: String,
+      enum: WING_NAMES,
+      required: true,
+      default: "General",
+    },
     content: { type: String, required: true, maxlength: 2000 },
     mediaUrls: [{ type: String }],
     likes: [{ type: Schema.Types.ObjectId, ref: "User" }],
@@ -33,8 +62,25 @@ const PostSchema = new Schema<IPost>(
         createdAt: { type: Date, default: Date.now },
       },
     ],
+    isDeleted: { type: Boolean, default: false },
+    reportCount: { type: Number, default: 0 },
+    reports: [
+      {
+        reporterId: {
+          type: Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        reason: { type: String, required: true, maxlength: 300 },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
   },
-  { timestamps: true },
+  { timestamps: true }
 );
+
+PostSchema.index({ wingName: 1 });
+PostSchema.index({ createdAt: -1 });
+PostSchema.index({ isDeleted: 1 });
 
 export const Post = model<IPost>("Post", PostSchema);

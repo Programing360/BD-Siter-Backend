@@ -1,18 +1,43 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 export const registerSchema = z.object({
-    fullName: z.string().min(3, 'Full name is required'),
-    email: z.string().email('Invalid email address'),
-    password: z.string().min(6, 'Password must be at least 6 characters long'),
-    profilePicture: z.string().url('Profile picture must be a valid URL'),
-    district: z.string().min(1, 'District is required'),
-    state: z.string().min(1, 'State is required'),
-    country: z.string().min(1, 'Country is required'),
-    referredBy: z.string().min(1, 'Referrer name or ID is mandatory for registration'),
-    nidOrPassportUrl: z.string().url('NID or Passport URL is required for verification'),
+  fullName: z.string().min(3, "Full name must be at least 3 characters"),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  profilePicture: z
+    .string()
+    .url("Profile picture must be a valid URL")
+    .optional(),
+  district: z.string().optional().default("Dhaka"),
+  state: z.string().optional().default("Dhaka"),
+  country: z.string().optional().default("Bangladesh"),
+  referralCode: z.string().optional(),
+  docType: z.enum(["NID", "PASSPORT", "ACADEMIC"]).optional(),
+  idNumber: z.string().optional(),
+  nidOrPassportUrl: z
+    .string()
+    .url("NID or Passport document URL is required for verification"),
+  backImageUrl: z.string().url().nullable().optional(),
 });
 
 export const loginSchema = z.object({
-    email: z.string().email('Invalid email address'),
-    password: z.string().min(1, 'Password is required'),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+export const verifyEmailSchema = z.object({
+  token: z.string().min(1, "Verification token is required"),
+});
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Invalid email address"),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  password: z.string().min(8, "New password must be at least 8 characters"),
+});
+
+export const resendVerificationSchema = z.object({
+  email: z.string().email("Invalid email address"),
 });

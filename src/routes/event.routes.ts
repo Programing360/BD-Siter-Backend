@@ -2,14 +2,21 @@ import { Router } from "express";
 import {
   createEvent,
   getEvents,
+  getEventById,
   registerForEvent,
+  cancelEvent,
+  archiveEvent,
 } from "../controllers/event.controller";
+import { verifyToken, optionalAuth } from "../middlewares/auth.middleware";
 
 const router = Router();
 
-router.post("/create", createEvent);
+router.post("/create", verifyToken, createEvent);
 router.get("/", getEvents);
-router.post("/:eventId/register", registerForEvent);
+router.get("/:id", getEventById);
+router.post("/:id/register", optionalAuth, registerForEvent);
+router.delete("/:id", verifyToken, cancelEvent);
+router.patch("/:id/archive", verifyToken, archiveEvent);
 
 const eventRoutes = router;
 
