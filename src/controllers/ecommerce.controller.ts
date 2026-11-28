@@ -1,10 +1,12 @@
 import { Response } from "express";
 import mongoose from "mongoose";
+import axios from "axios";
 import { Product } from "../models/Product.model";
 import { Order } from "../models/Order.model";
 import { Cart } from "../models/Cart.model";
 import { Review } from "../models/Review.model";
 import { Business } from "../models/Business.model";
+import { Payment } from "../models/Payment.model";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import { createNotification } from "../utils/notification.service";
 import {
@@ -45,6 +47,14 @@ export const addProduct = async (
 
     const { businessId, brandName, ...rest } = validationResult.data;
 
+    // Gracefully handle custom category strings (e.g., "Modest Fashion") as subCategory if not explicitly provided
+    const subCategory =
+      rest.subCategory ||
+      (typeof req.body.category === "string" &&
+        !["product", "service"].includes(req.body.category.trim().toLowerCase())
+        ? req.body.category.trim()
+        : undefined);
+
     // Verify business exists and is linked to the authenticated user
     const business = await Business.findById(businessId);
     if (!business) {
@@ -63,12 +73,24 @@ export const addProduct = async (
       return;
     }
 
+    const slug =
+      (rest as any).slug ||
+      rest.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)/g, "");
+
     const product = new Product({
       ...rest,
+      slug,
+      subCategory,
       businessId: new mongoose.Types.ObjectId(businessId),
       sellerId: new mongoose.Types.ObjectId(req.user.id),
       brandName,
       price: rest.salePrice,
+      isAvailable: true,
+      status: "Approved",
+      isDeleted: false,
     });
 
     await product.save();
@@ -110,7 +132,10 @@ export const getProducts = async (
       sortOrder,
     } = validationResult.data;
 
-    const query: any = { isAvailable: true, isDeleted: false };
+    const query: any = {
+      isAvailable: { $ne: false },
+      isDeleted: { $ne: true },
+    };
 
     if (category) {
       query.category = category;
@@ -160,19 +185,31 @@ export const getProducts = async (
   }
 };
 
-// ─── 3. Get Single Product (GET /products/:id) ────────────────────────────────
+// ─── 3. Get Single Product (GET /products/:id or GET /products/:slug) ───────
 export const getProductById = async (
   req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
-    const id = getParam(req.params.id);
-    if (!id || !mongoose.Types.ObjectId.isValid(id)) {
-      res.status(400).json({ success: false, message: "Invalid product ID." });
+    const idOrSlug = getParam(req.params.id);
+    if (!idOrSlug) {
+      res.status(400).json({ success: false, message: "Product identifier is required." });
       return;
     }
 
-    const product = await Product.findOne({ _id: id, isDeleted: false })
+    const escapeRegex = (text: string) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
+
+    let filter: any = { isDeleted: false };
+    if (mongoose.Types.ObjectId.isValid(idOrSlug)) {
+      filter.$or = [{ _id: idOrSlug }, { slug: idOrSlug }];
+    } else {
+      filter.$or = [
+        { slug: idOrSlug },
+        { title: { $regex: new RegExp("^" + escapeRegex(idOrSlug.replace(/-/g, " ")), "i") } },
+      ];
+    }
+
+    const product = await Product.findOne(filter)
       .populate("businessId", "brands subscriptionStatus")
       .populate("sellerId", "fullName profilePicture role location");
 
@@ -310,6 +347,54 @@ export const deleteProduct = async (
 };
 
 // ─── 6. Cart Management (GET /cart, POST /cart/add, DELETE /cart/:itemId) ─────
+// Helper to format Cart Document cleanly
+function formatCartResponse(cartDoc: any) {
+  let subtotal = 0;
+  let totalItems = 0;
+
+  const items = (cartDoc?.items || []).map((item: any) => {
+    const p = item.productId || {};
+    const title = p.title || "Product";
+    const brandName = p.brandName || "";
+    const slug = p.slug || (p._id ? p._id.toString() : "");
+    const image = (Array.isArray(p.images) && p.images[0]) || "";
+    const stock = typeof p.stock === "number" ? p.stock : 999;
+    const mrp = typeof p.mrpPrice === "number" ? p.mrpPrice : (item.price || 0);
+    const salePrice = typeof p.salePrice === "number" ? p.salePrice : (item.price || 0);
+    const price = item.price || salePrice;
+    const quantity = item.quantity || 1;
+    const lineTotal = price * quantity;
+
+    subtotal += lineTotal;
+    totalItems += quantity;
+
+    return {
+      _id: item._id ? item._id.toString() : undefined,
+      productId: (p._id ? p._id.toString() : item.productId ? item.productId.toString() : ""),
+      title,
+      slug,
+      brandName,
+      price,
+      mrp,
+      salePrice,
+      image,
+      quantity,
+      stock,
+      lineTotal,
+      isWholesale: !!item.isWholesale,
+    };
+  });
+
+  return {
+    _id: cartDoc._id ? cartDoc._id.toString() : undefined,
+    userId: cartDoc.userId ? cartDoc.userId.toString() : undefined,
+    items,
+    totalItems,
+    subtotal,
+  };
+}
+
+// ─── 5. Get User's Cart (GET /cart) ───────────────────────────────────────────
 export const getCart = async (
   req: AuthenticatedRequest,
   res: Response
@@ -322,7 +407,7 @@ export const getCart = async (
 
     let cart = await Cart.findOne({
       userId: new mongoose.Types.ObjectId(req.user.id),
-    }).populate("items.productId", "title images salePrice wholesalePrice isWholesaleEligible stock brandName");
+    }).populate("items.productId", "title slug images mrpPrice salePrice wholesalePrice isWholesaleEligible stock brandName");
 
     if (!cart) {
       cart = new Cart({
@@ -332,20 +417,22 @@ export const getCart = async (
       await cart.save();
     }
 
-    const subtotal = cart.items.reduce((acc, item) => acc + item.price * item.quantity, 0);
+    const formatted = formatCartResponse(cart);
 
     res.status(200).json({
       success: true,
-      data: {
-        cart,
-        subtotal,
-      },
+      data: formatted,
+      cart: formatted,
+      items: formatted.items,
+      totalItems: formatted.totalItems,
+      subtotal: formatted.subtotal,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
   }
 };
 
+// ─── 6. Add Item to Cart (POST /cart/add) ──────────────────────────────────────
 export const addToCart = async (
   req: AuthenticatedRequest,
   res: Response
@@ -366,9 +453,16 @@ export const addToCart = async (
 
     const { productId, quantity, isWholesale } = validationResult.data;
 
-    const product = await Product.findOne({ _id: productId, isAvailable: true, isDeleted: false });
+    let productFilter: any = { isDeleted: { $ne: true }, isAvailable: { $ne: false } };
+    if (mongoose.Types.ObjectId.isValid(productId)) {
+      productFilter._id = new mongoose.Types.ObjectId(productId);
+    } else {
+      productFilter.$or = [{ _id: productId }, { slug: productId }];
+    }
+
+    const product = await Product.findOne(productFilter);
     if (!product) {
-      res.status(404).json({ success: false, message: "Product not available." });
+      res.status(404).json({ success: false, message: "Product not found or unavailable." });
       return;
     }
 
@@ -381,7 +475,7 @@ export const addToCart = async (
     }
 
     // Determine unit price
-    let unitPrice = product.salePrice;
+    let unitPrice = product.salePrice || product.price || 0;
     if (isWholesale) {
       if (!product.isWholesaleEligible || product.wholesalePrice === undefined) {
         res.status(400).json({
@@ -404,9 +498,11 @@ export const addToCart = async (
       });
     }
 
+    const targetProductIdStr = (product._id as any).toString();
+
     // Check if item already exists with matching wholesale option
     const existingIndex = cart.items.findIndex(
-      (item) => item.productId.toString() === productId && !!item.isWholesale === !!isWholesale
+      (item) => item.productId.toString() === targetProductIdStr && !!item.isWholesale === !!isWholesale
     );
 
     if (existingIndex > -1) {
@@ -414,7 +510,7 @@ export const addToCart = async (
       cart.items[existingIndex].price = unitPrice;
     } else {
       cart.items.push({
-        productId: new mongoose.Types.ObjectId(productId),
+        productId: product._id,
         quantity,
         price: unitPrice,
         isWholesale: !!isWholesale,
@@ -422,12 +518,83 @@ export const addToCart = async (
     }
 
     await cart.save();
-    await cart.populate("items.productId", "title images salePrice wholesalePrice stock brandName");
+    await cart.populate("items.productId", "title slug images mrpPrice salePrice wholesalePrice stock brandName");
+
+    const formatted = formatCartResponse(cart);
 
     res.status(200).json({
       success: true,
       message: "Item added to cart successfully!",
-      data: cart,
+      data: formatted,
+      cart: formatted,
+      items: formatted.items,
+      totalItems: formatted.totalItems,
+      subtotal: formatted.subtotal,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
+
+// ─── Update Item Quantity (PUT/PATCH /cart/:itemId or /cart) ──────────────────
+export const updateCartItem = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: "Authentication required." });
+      return;
+    }
+
+    const targetId = getParam(req.params.itemId) || req.body.productId;
+    const quantity = Number(req.body.quantity);
+
+    if (!targetId) {
+      res.status(400).json({ success: false, message: "Item or product ID is required." });
+      return;
+    }
+
+    const cart = await Cart.findOne({
+      userId: new mongoose.Types.ObjectId(req.user.id),
+    });
+
+    if (!cart) {
+      res.status(404).json({ success: false, message: "Cart not found." });
+      return;
+    }
+
+    // Match either cart item _id or item.productId
+    const itemIndex = cart.items.findIndex(
+      (item: any) =>
+        (item._id && item._id.toString() === targetId) ||
+        (item.productId && item.productId.toString() === targetId)
+    );
+
+    if (itemIndex === -1) {
+      res.status(404).json({ success: false, message: "Item not found in cart." });
+      return;
+    }
+
+    if (quantity <= 0) {
+      cart.items.splice(itemIndex, 1);
+    } else {
+      cart.items[itemIndex].quantity = quantity;
+    }
+
+    await cart.save();
+    await cart.populate("items.productId", "title slug images mrpPrice salePrice wholesalePrice stock brandName");
+
+    const formatted = formatCartResponse(cart);
+
+    res.status(200).json({
+      success: true,
+      message: "Cart updated successfully.",
+      data: formatted,
+      cart: formatted,
+      items: formatted.items,
+      totalItems: formatted.totalItems,
+      subtotal: formatted.subtotal,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
@@ -444,7 +611,7 @@ export const removeFromCart = async (
       return;
     }
 
-    const itemId = getParam(req.params.itemId);
+    const itemId = getParam(req.params.itemId) || (req.query.productId as string);
 
     const cart = await Cart.findOne({
       userId: new mongoose.Types.ObjectId(req.user.id),
@@ -455,13 +622,28 @@ export const removeFromCart = async (
       return;
     }
 
-    cart.items.pull(itemId);
+    // Remove matching item by subdoc _id or productId
+    cart.items = cart.items.filter(
+      (item: any) =>
+        !(
+          (item._id && item._id.toString() === itemId) ||
+          (item.productId && item.productId.toString() === itemId)
+        )
+    ) as any;
+
     await cart.save();
+    await cart.populate("items.productId", "title slug images mrpPrice salePrice wholesalePrice stock brandName");
+
+    const formatted = formatCartResponse(cart);
 
     res.status(200).json({
       success: true,
       message: "Item removed from cart.",
-      data: cart,
+      data: formatted,
+      cart: formatted,
+      items: formatted.items,
+      totalItems: formatted.totalItems,
+      subtotal: formatted.subtotal,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
@@ -490,6 +672,11 @@ export const clearCart = async (
     res.status(200).json({
       success: true,
       message: "Cart cleared successfully.",
+      data: {
+        items: [],
+        totalItems: 0,
+        subtotal: 0,
+      },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
@@ -593,8 +780,10 @@ export const createOrder = async (
     const platformCommissionRate = 0.05;
     const platformCommission = Math.round(totalAmount * platformCommissionRate * 100) / 100;
     const sellerEarnings = Math.round((totalAmount - platformCommission) * 100) / 100;
+    const orderNumber = `BDS-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const order = new Order({
+      orderNumber,
       buyerId: new mongoose.Types.ObjectId(req.user.id),
       orderItems: finalOrderItems,
       totalAmount,
@@ -608,17 +797,156 @@ export const createOrder = async (
 
     await order.save();
 
-    // If order was created from Cart, clear the cart
-    await Cart.findOneAndUpdate(
-      { userId: new mongoose.Types.ObjectId(req.user.id) },
-      { items: [] }
-    );
+    // Order created with status Pending. Cart will be cleared upon confirmed payment in webhook/verify.
+    const backendUrl = (
+      process.env.BACKEND_URL || "http://localhost:5000"
+    ).replace(/\/+$/, "");
+    const frontendUrl = (
+      process.env.FRONTEND_URL || "http://localhost:3000"
+    ).replace(/\/+$/, "");
 
-    res.status(201).json({
-      success: true,
-      message: "Order placed successfully! Please proceed to payment.",
-      data: order,
+    let rawBaseUrl = (
+      process.env.ZINIPAY_BASE_URL || "https://api.zinipay.com"
+    ).trim().replace(/\/+$/, "");
+    if (!rawBaseUrl.endsWith("/v1")) {
+      rawBaseUrl = `${rawBaseUrl}/v1`;
+    }
+    const createEndpoint = `${rawBaseUrl}/payment/create`;
+    const apiKey = (process.env.ZINIPAY_API_KEY || "").trim();
+
+    if (!apiKey) {
+      res.status(500).json({
+        success: false,
+        message: "Payment gateway is not configured (missing ZINIPAY_API_KEY).",
+      });
+      return;
+    }
+
+    const transId = `TRAN_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+    const payment = await Payment.create({
+      transactionId: transId,
+      gateway: "ZiniPay",
+      userId: req.user.id,
+      paymentType: "Order",
+      referenceId: (order._id as any).toString(),
+      amount: totalAmount,
+      currency: "BDT",
+      status: "Pending",
     });
+
+    const cusName = (req.user as any).fullName || shippingAddress.district || "Sister Customer";
+    const cusEmail = (req.user as any).email || "customer@bdsisters.org";
+    const cusPhone = shippingAddress.phone || "01700000000";
+
+    const payload = {
+      amount: totalAmount,
+      currency: "BDT",
+      cus_name: cusName,
+      cus_email: cusEmail,
+      cus_phone: cusPhone,
+      customer_name: cusName,
+      customer_email: cusEmail,
+      customer_phone: cusPhone,
+      redirect_url: `${backendUrl}/api/payment/zinipay/verify?tranId=${transId}`,
+      cancel_url: `${backendUrl}/api/payment/zinipay/cancel?tranId=${transId}`,
+      webhook_url: `${backendUrl}/api/payment/zinipay/webhook`,
+      metadata: {
+        transaction_id: transId,
+        payment_type: "Order",
+        reference_id: (order._id as any).toString(),
+        user_id: req.user.id,
+      },
+    };
+
+    try {
+      const zinipayRes = await axios.post(createEndpoint, payload, {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "zini-api-key": apiKey,
+          "zinipay-api-key": apiKey,
+          Authorization: `Bearer ${apiKey}`,
+        },
+        timeout: 15000,
+      });
+
+      const resData = zinipayRes.data;
+      const paymentUrl =
+        resData?.payment_url ||
+        resData?.data?.payment_url ||
+        resData?.GatewayPageURL ||
+        resData?.paymentUrl;
+      const invoiceId =
+        resData?.invoice_id ||
+        resData?.data?.invoice_id ||
+        resData?.val_id ||
+        resData?.id;
+
+      if (!paymentUrl) {
+        payment.status = "Failed";
+        payment.gatewayResponse = resData;
+        await payment.save();
+
+        res.status(400).json({
+          success: false,
+          message:
+            resData?.message ||
+            "Failed to obtain real payment URL from ZiniPay gateway.",
+        });
+        return;
+      }
+
+      payment.invoiceId = invoiceId;
+      payment.gatewayResponse = resData;
+      await payment.save();
+
+      res.status(201).json({
+        success: true,
+        message: "Order placed successfully! Redirecting to ZiniPay...",
+        data: {
+          ...order.toObject(),
+          paymentUrl,
+          payment_url: paymentUrl,
+          invoiceId,
+          transId,
+        },
+        paymentUrl,
+        payment_url: paymentUrl,
+      });
+      return;
+    } catch (payErr: any) {
+      const errData = payErr.response?.data;
+      const errStatus = payErr.response?.status || 400;
+      const errMsg =
+        errData?.message ||
+        errData?.msg ||
+        (typeof errData === "string" ? errData : null) ||
+        payErr.message ||
+        "ZiniPay gateway error";
+
+      console.error("ZiniPay order initiation error:", {
+        status: errStatus,
+        data: errData,
+        message: errMsg,
+      });
+
+      payment.status = "Failed";
+      payment.gatewayResponse = errData || { error: errMsg };
+      await payment.save();
+
+      res
+        .status(errStatus >= 400 && errStatus < 500 ? errStatus : 400)
+        .json({
+          success: false,
+          gateway: "ZiniPay",
+          message: errMsg.startsWith("ZiniPay")
+            ? errMsg
+            : `ZiniPay Error: ${errMsg}`,
+          error: errData,
+        });
+      return;
+    }
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
   }
@@ -666,6 +994,45 @@ export const getSellerOrders = async (
     const orders = await Order.find({
       "orderItems.sellerId": sellerObjectId,
     })
+      .populate("buyerId", "fullName email contactInfo")
+      .populate("orderItems.productId", "title images brandName")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      data: orders,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
+
+// ─── 9b. Get Orders (General: Admin sees all, Seller sees seller orders, Buyer sees buyer orders) ─
+export const getOrders = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ success: false, message: "Authentication required." });
+      return;
+    }
+
+    const isAdmin = req.user.role === "Admin" || req.user.role === "SuperAdmin";
+    let query: Record<string, any> = {};
+
+    if (!isAdmin) {
+      const userObjectId = new mongoose.Types.ObjectId(req.user.id);
+      query = {
+        $or: [
+          { buyerId: userObjectId },
+          { "orderItems.sellerId": userObjectId },
+        ],
+      };
+    }
+
+    const orders = await Order.find(query)
       .populate("buyerId", "fullName email contactInfo")
       .populate("orderItems.productId", "title images brandName")
       .sort({ createdAt: -1 });

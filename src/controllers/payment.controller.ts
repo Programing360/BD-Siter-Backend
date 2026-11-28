@@ -1,10 +1,12 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
 import axios from "axios";
 import { Business } from "../models/Business.model";
 import { User } from "../models/User.model";
 import { Order } from "../models/Order.model";
 import { Event } from "../models/Event.model";
 import { Payment, IPayment } from "../models/Payment.model";
+import { Cart } from "../models/Cart.model";
 import { sendEmail } from "../utils/sendEmail";
 import { createNotification } from "../utils/notification.service";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
@@ -15,13 +17,72 @@ const getParam = (param: unknown): string => {
   return typeof param === "string" ? param : "";
 };
 
+// Helper to resolve clean frontend redirect path by paymentType
+const getFrontendReturnUrl = (
+  frontendUrl: string,
+  paymentType?: string,
+): string => {
+  const base = frontendUrl.replace(/\/+$/, "");
+  switch (paymentType) {
+    case "PaidMembership":
+      return `${base}/member/billing`;
+    case "Order":
+      return `${base}/member/orders`;
+    case "EventTicket":
+      return `${base}/member/events`;
+    case "BusinessSubscription":
+      return `${base}/member/business`;
+    default:
+      return `${base}/member/billing`;
+  }
+};
+
+// Safe wrapper for email dispatch so SMTP/Resend failures never crash payment flows
+const sendPaymentEmailSafe = async (options: {
+  to?: string;
+  email?: string;
+  subject: string;
+  html: string;
+  text?: string;
+  message?: string;
+}): Promise<void> => {
+  try {
+    await sendEmail({
+      to: options.to || options.email,
+      email: options.to || options.email,
+      subject: options.subject,
+      html: options.html,
+      text: options.text || options.message,
+      message: options.text || options.message,
+    });
+  } catch (emailErr) {
+    console.warn(
+      "⚠️ Non-fatal: Payment confirmation email dispatch failed:",
+      (emailErr as Error).message,
+    );
+  }
+};
+
+// Safe wrapper for in-app notification creation
+const createNotificationSafe = async (
+  notificationData: Parameters<typeof createNotification>[0],
+): Promise<void> => {
+  try {
+    await createNotification(notificationData);
+  } catch (notifErr) {
+    console.warn(
+      "⚠️ Non-fatal: Notification creation failed:",
+      (notifErr as Error).message,
+    );
+  }
+};
+
 // ─── Reusable Payment Fulfillment (Idempotent) ───────────────────────────────
 export const fulfillPayment = async (
   payment: IPayment,
-  gatewayResponse?: Record<string, any>
+  gatewayResponse?: Record<string, any>,
 ): Promise<void> => {
   if (payment.status === "Success") {
-    // Already fulfilled
     return;
   }
 
@@ -55,7 +116,7 @@ export const fulfillPayment = async (
     if (user && user.email) {
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-          <h2 style="color: #0f766e;">Assalamu Alaikum, ${user.fullName}!</h2>
+          <h2 style="color: #5B9891;">Assalamu Alaikum, ${user.fullName}!</h2>
           <p>Your payment for <strong>BDSisters.org Business Subscription</strong> via ZiniPay has been successfully processed.</p>
           <p>Transaction ID: <strong>${payment.transactionId}</strong></p>
           ${payment.invoiceId ? `<p>Invoice ID: <strong>${payment.invoiceId}</strong></p>` : ""}
@@ -67,19 +128,20 @@ export const fulfillPayment = async (
         </div>
       `;
 
-      await sendEmail({
+      await sendPaymentEmailSafe({
         email: user.email,
         subject: "Business Subscription Payment Successful - BDSisters.org",
-        message: "Your payment was successful and your business subscription is now active.",
+        message:
+          "Your payment was successful and your business subscription is now active.",
         html: emailHtml,
       });
 
-      await createNotification({
+      await createNotificationSafe({
         recipientId: payment.userId,
         type: "Business",
         title: "Business Subscription Activated! 🚀",
         message: `Your payment of ${payment.amount} BDT via ZiniPay was successful. All registered brands are now published.`,
-        link: `${frontendUrl}/dashboard`,
+        link: `${frontendUrl}/member/business`,
       });
     }
   }
@@ -94,11 +156,21 @@ export const fulfillPayment = async (
       await order.save();
     }
 
+    // Clear user's shopping cart in MongoDB upon confirmed payment
+    try {
+      await Cart.findOneAndUpdate(
+        { userId: new mongoose.Types.ObjectId(payment.userId) },
+        { items: [] }
+      );
+    } catch (cartErr) {
+      console.warn("Cart clear after payment fulfillment error:", cartErr);
+    }
+
     const user = await User.findById(payment.userId);
     if (user && user.email) {
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-          <h2 style="color: #0f766e;">Assalamu Alaikum, ${user.fullName}!</h2>
+          <h2 style="color: #5B9891;">Assalamu Alaikum, ${user.fullName}!</h2>
           <p>Your order payment of <strong>${payment.amount} BDT</strong> via ZiniPay has been successfully processed.</p>
           <p>Order ID: <strong>${payment.referenceId}</strong></p>
           <p>Transaction ID: <strong>${payment.transactionId}</strong></p>
@@ -110,19 +182,20 @@ export const fulfillPayment = async (
         </div>
       `;
 
-      await sendEmail({
+      await sendPaymentEmailSafe({
         email: user.email,
         subject: "Order Payment Successful - BDSisters.org",
-        message: "Your payment for order " + payment.referenceId + " was successful.",
+        message:
+          "Your payment for order " + payment.referenceId + " was successful.",
         html: emailHtml,
       });
 
-      await createNotification({
+      await createNotificationSafe({
         recipientId: payment.userId,
         type: "Order",
         title: "Order Payment Confirmed! 🛍️",
         message: `Your payment of ${payment.amount} BDT for order #${payment.referenceId.slice(-6)} has been verified.`,
-        link: `${frontendUrl}/orders`,
+        link: `${frontendUrl}/member/orders`,
       });
     }
   }
@@ -132,7 +205,7 @@ export const fulfillPayment = async (
     const event = await Event.findById(payment.referenceId);
     if (event) {
       const alreadyRegistered = event.registeredAttendees.some(
-        (id) => id.toString() === payment.userId.toString()
+        (id) => id.toString() === payment.userId.toString(),
       );
       if (!alreadyRegistered) {
         event.registeredAttendees.push(payment.userId as any);
@@ -144,7 +217,7 @@ export const fulfillPayment = async (
     if (user && user.email && event) {
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-          <h2 style="color: #0f766e;">Assalamu Alaikum, ${user.fullName}!</h2>
+          <h2 style="color: #5B9891;">Assalamu Alaikum, ${user.fullName}!</h2>
           <p>Your event ticket booking for <strong>${event.title}</strong> has been confirmed.</p>
           <p>Transaction ID: <strong>${payment.transactionId}</strong></p>
           <p>Ticket Amount: <strong>${payment.amount} BDT</strong></p>
@@ -156,19 +229,62 @@ export const fulfillPayment = async (
         </div>
       `;
 
-      await sendEmail({
+      await sendPaymentEmailSafe({
         email: user.email,
         subject: `Ticket Confirmed: ${event.title} - BDSisters.org`,
         message: `Your event ticket for ${event.title} was confirmed.`,
         html: emailHtml,
       });
 
-      await createNotification({
+      await createNotificationSafe({
         recipientId: payment.userId,
         type: "System",
         title: "Event Ticket Confirmed! 🎟️",
         message: `Your ticket for "${event.title}" has been confirmed. See event details in your dashboard.`,
-        link: `${frontendUrl}/events`,
+        link: `${frontendUrl}/member/events`,
+      });
+    }
+  }
+
+  // 4. Paid Membership Fulfillment
+  else if (payment.paymentType === "PaidMembership") {
+    const targetUserId = payment.referenceId || payment.userId;
+    const user = await User.findById(targetUserId);
+    if (user) {
+      if (user.role !== "Admin" && user.role !== "SuperAdmin") {
+        user.role = "PaidMember";
+        await user.save();
+      }
+
+      if (user.email) {
+        const emailHtml = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #5B9891;">Assalamu Alaikum, ${user.fullName}!</h2>
+          <p>Congratulations! Your upgrade to <strong>Paid Sisterhood Membership</strong> on BDSisters.org has been confirmed.</p>
+          <p>Transaction ID: <strong>${payment.transactionId}</strong></p>
+          <p>Amount: <strong>${payment.amount} BDT</strong></p>
+          ${payment.invoiceId ? `<p>Invoice ID: <strong>${payment.invoiceId}</strong></p>` : ""}
+          <p>You now have full access to exclusive resources, priority event booking, and member-only sisterhood circles.</p>
+          <br/>
+          <p>Jazakallahu Khairan for supporting BDSisters.org!</p>
+          <p><strong>Team BDSisters.org</strong></p>
+        </div>
+      `;
+
+        await sendPaymentEmailSafe({
+          email: user.email,
+          subject: "Paid Membership Confirmed - BDSisters.org",
+          message: `Your payment of ${payment.amount} BDT for Paid Membership upgrade was successful.`,
+          html: emailHtml,
+        });
+      }
+
+      await createNotificationSafe({
+        recipientId: user._id as any,
+        type: "System",
+        title: "Paid Membership Active! 🌟",
+        message: `Assalamu Alaikum! Your Paid Membership is now active. Enjoy premium features and sisterhood perks.`,
+        link: `${frontendUrl}/member/billing`,
       });
     }
   }
@@ -177,7 +293,7 @@ export const fulfillPayment = async (
 // ─── 1. Initiate ZiniPay Payment (POST /api/payment/zinipay/init) ─────────────
 export const initZiniPayPayment = async (
   req: AuthenticatedRequest,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const {
@@ -207,17 +323,29 @@ export const initZiniPayPayment = async (
       referenceId = (orderId || req.body.referenceId) as string;
     } else if (paymentType === "EventTicket") {
       referenceId = (eventId || req.body.referenceId) as string;
+    } else if (paymentType === "PaidMembership") {
+      referenceId = (req.body.referenceId || userId) as string;
     } else {
       referenceId = (businessId || req.body.referenceId) as string;
+      if (!referenceId && userId && mongoose.Types.ObjectId.isValid(userId)) {
+        const userBiz = await Business.findOne({ userId });
+        if (userBiz) {
+          referenceId = userBiz._id.toString();
+        }
+      }
     }
 
-    if (!referenceId) {
+    if (!referenceId || !mongoose.Types.ObjectId.isValid(referenceId)) {
       res.status(400).json({
         success: false,
         message: `Valid reference ID required for ${paymentType} payment.`,
       });
       return;
     }
+
+    let customerNameResolved = customerName;
+    let customerEmailResolved = customerEmail;
+    let customerPhoneResolved = customerPhone;
 
     // Verify entity existence
     if (paymentType === "Order") {
@@ -233,31 +361,55 @@ export const initZiniPayPayment = async (
         return;
       }
       if (event.isCancelled) {
-        res.status(400).json({ success: false, message: "This event has been cancelled." });
+        res
+          .status(400)
+          .json({ success: false, message: "This event has been cancelled." });
         return;
+      }
+    } else if (paymentType === "PaidMembership") {
+      const targetUser = await User.findById(referenceId);
+      if (!targetUser) {
+        res
+          .status(404)
+          .json({ success: false, message: "User account not found." });
+        return;
+      }
+      if (!customerNameResolved) customerNameResolved = targetUser.fullName;
+      if (!customerEmailResolved) customerEmailResolved = targetUser.email;
+      if (!customerPhoneResolved && targetUser.contactInfo?.phone) {
+        customerPhoneResolved = targetUser.contactInfo.phone;
       }
     } else {
       const business = await Business.findById(referenceId);
       if (!business) {
-        res.status(404).json({ success: false, message: "Business profile not found." });
+        res
+          .status(404)
+          .json({ success: false, message: "Business profile not found." });
         return;
       }
     }
 
     const amount = Number(totalAmount || req.body.amount);
     if (!amount || amount <= 0) {
-      res.status(400).json({ success: false, message: "Valid amount is required." });
+      res
+        .status(400)
+        .json({ success: false, message: "Valid amount is required." });
       return;
     }
 
     const transId = `TRAN_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
-    const backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    const zinipayBaseUrl = (
-      process.env.ZINIPAY_BASE_URL || "https://api.zinipay.com/v1"
-    ).replace(/\/$/, "");
-    const apiKey = process.env.ZINIPAY_API_KEY || "sandbox_test_key";
+    const backendUrl = (
+      process.env.BACKEND_URL || "http://localhost:5000"
+    ).replace(/\/+$/, "");
+    let rawBaseUrl = (
+      process.env.ZINIPAY_BASE_URL || "https://api.zinipay.com"
+    ).trim().replace(/\/+$/, "");
+    if (!rawBaseUrl.endsWith("/v1")) {
+      rawBaseUrl = `${rawBaseUrl}/v1`;
+    }
+    const createEndpoint = `${rawBaseUrl}/payment/create`;
+    const apiKey = (process.env.ZINIPAY_API_KEY || "").trim();
 
     // Create pending payment record
     const payment = await Payment.create({
@@ -271,15 +423,32 @@ export const initZiniPayPayment = async (
       status: "Pending",
     });
 
+    // Require real ZiniPay API key
+    if (!apiKey) {
+      res.status(500).json({
+        success: false,
+        message: "Payment gateway is not configured (missing ZINIPAY_API_KEY).",
+      });
+      return;
+    }
+
+    const cusName = customerNameResolved || customerName || "Sister Member";
+    const cusEmail =
+      customerEmailResolved || customerEmail || "sister@bdsisters.org";
+    const cusPhone = customerPhoneResolved || customerPhone || "01700000000";
+
     const payload = {
       amount,
       currency,
+      cus_name: cusName,
+      cus_email: cusEmail,
+      cus_phone: cusPhone,
+      customer_name: cusName,
+      customer_email: cusEmail,
+      customer_phone: cusPhone,
       redirect_url: `${backendUrl}/api/payment/zinipay/verify?tranId=${transId}`,
       cancel_url: `${backendUrl}/api/payment/zinipay/cancel?tranId=${transId}`,
       webhook_url: `${backendUrl}/api/payment/zinipay/webhook`,
-      customer_name: customerName || "Sister Member",
-      customer_email: customerEmail || "sister@bdsisters.org",
-      customer_phone: customerPhone || "01700000000",
       metadata: {
         transaction_id: transId,
         payment_type: paymentType,
@@ -289,39 +458,29 @@ export const initZiniPayPayment = async (
     };
 
     try {
-      const createEndpoints = [
-        `${zinipayBaseUrl}/payment/create`,
-        `${zinipayBaseUrl}/create-payment`,
-      ];
-
-      let response: any = null;
-      let lastError: any = null;
-
-      for (const endpoint of createEndpoints) {
-        try {
-          response = await axios.post(endpoint, payload, {
-            headers: {
-              "Content-Type": "application/json",
-              "zini-api-key": apiKey,
-              "zinipay-api-key": apiKey,
-              Authorization: `Bearer ${apiKey}`,
-            },
-            timeout: 10000,
-          });
-          if (response.data) break;
-        } catch (err) {
-          lastError = err;
-        }
-      }
+      const response = await axios.post(createEndpoint, payload, {
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "zini-api-key": apiKey,
+          "zinipay-api-key": apiKey,
+          Authorization: `Bearer ${apiKey}`,
+        },
+        timeout: 15000,
+      });
 
       if (response && response.data) {
         const resData = response.data;
         const paymentUrl =
           resData.payment_url ||
           resData.data?.payment_url ||
-          resData.GatewayPageURL;
+          resData.GatewayPageURL ||
+          resData.paymentUrl;
         const invoiceId =
-          resData.invoice_id || resData.data?.invoice_id || resData.id;
+          resData.invoice_id ||
+          resData.data?.invoice_id ||
+          resData.val_id ||
+          resData.id;
 
         if (paymentUrl) {
           payment.invoiceId = invoiceId;
@@ -339,42 +498,41 @@ export const initZiniPayPayment = async (
         }
       }
 
-      // If gateway is in sandbox or returned non-redirect payload
-      if (apiKey === "sandbox_test_key" || !apiKey) {
-        const mockPaymentUrl = `${backendUrl}/api/payment/zinipay/verify?tranId=${transId}&status=COMPLETED`;
-        payment.invoiceId = `INV_MOCK_${Date.now()}`;
-        await payment.save();
-
-        res.status(200).json({
-          success: true,
-          gateway: "ZiniPay",
-          isMock: true,
-          paymentUrl: mockPaymentUrl,
-          invoiceId: payment.invoiceId,
-          transId,
-          message: "Sandbox test payment URL generated.",
-        });
-        return;
-      }
-
-      throw lastError || new Error("Failed to receive payment URL from ZiniPay.");
+      throw new Error(
+        response.data?.message ||
+        "Failed to receive valid payment URL from ZiniPay.",
+      );
     } catch (apiErr: any) {
-      console.error("ZiniPay initiation error:", apiErr.response?.data || apiErr.message);
+      const errData = apiErr.response?.data;
+      const errStatus = apiErr.response?.status || 400;
+      const errMsg =
+        errData?.message ||
+        errData?.msg ||
+        (typeof errData === "string" ? errData : null) ||
+        apiErr.message ||
+        "ZiniPay gateway error";
 
-      // Graceful fallback for development / test keys
-      const mockPaymentUrl = `${backendUrl}/api/payment/zinipay/verify?tranId=${transId}&status=COMPLETED`;
-      payment.invoiceId = `INV_SANDBOX_${Date.now()}`;
+      console.error("ZiniPay initiation error:", {
+        status: errStatus,
+        data: errData,
+        message: errMsg,
+      });
+
+      payment.status = "Failed";
+      payment.gatewayResponse = errData || { error: errMsg };
       await payment.save();
 
-      res.status(200).json({
-        success: true,
-        gateway: "ZiniPay",
-        isSandboxFallback: true,
-        paymentUrl: mockPaymentUrl,
-        invoiceId: payment.invoiceId,
-        transId,
-        notice: "ZiniPay sandbox redirect generated.",
-      });
+      res
+        .status(errStatus >= 400 && errStatus < 500 ? errStatus : 400)
+        .json({
+          success: false,
+          gateway: "ZiniPay",
+          message: errMsg.startsWith("ZiniPay")
+            ? errMsg
+            : `ZiniPay Error: ${errMsg}`,
+          error: errData,
+        });
+      return;
     }
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
@@ -384,28 +542,31 @@ export const initZiniPayPayment = async (
 // ─── 2. ZiniPay Verify / Redirect Handler (POST & GET /api/payment/zinipay/verify)
 export const verifyZiniPayPayment = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+
   try {
+    const query = (req.query || {}) as Record<string, any>;
+    const body = (req.body || {}) as Record<string, any>;
+
     const tranId =
-      getParam(req.query.tranId) ||
-      getParam(req.body.tran_id) ||
-      getParam(req.body.transaction_id) ||
-      getParam(req.query.transaction_id);
+      getParam(query.tranId) ||
+      getParam(body.tran_id) ||
+      getParam(body.transaction_id) ||
+      getParam(query.transaction_id);
 
     const invoiceId =
-      getParam(req.query.invoice_id) ||
-      getParam(req.body.invoice_id) ||
-      getParam(req.query.invoiceId) ||
-      getParam(req.body.invoiceId);
+      getParam(query.invoice_id) ||
+      getParam(body.invoice_id) ||
+      getParam(query.invoiceId) ||
+      getParam(body.invoiceId);
 
     const statusParam = (
-      getParam(req.query.status) ||
-      getParam(req.body.status) ||
+      getParam(query.status) ||
+      getParam(body.status) ||
       ""
     ).toUpperCase();
-
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
 
     let payment = tranId
       ? await Payment.findOne({ transactionId: tranId })
@@ -416,15 +577,13 @@ export const verifyZiniPayPayment = async (
     }
 
     if (!payment) {
-      res.status(404).send(`
-        <div style="text-align: center; margin-top: 50px; font-family: Arial, sans-serif;">
-          <h1 style="color: #e11d48;">Payment Record Not Found</h1>
-          <p>Transaction ID: ${tranId || "Unknown"}</p>
-          <a href="${frontendUrl}/dashboard" style="color: #0f766e; text-decoration: none;">Return to Dashboard</a>
-        </div>
-      `);
+      res.redirect(
+        `${frontendUrl.replace(/\/+$/, "")}/member/billing?payment=not_found&tranId=${encodeURIComponent(tranId || "")}`,
+      );
       return;
     }
+
+    const returnUrl = getFrontendReturnUrl(frontendUrl, payment.paymentType);
 
     // Check with ZiniPay verify API if invoice ID is available
     let isVerifiedSuccess =
@@ -432,10 +591,14 @@ export const verifyZiniPayPayment = async (
       statusParam === "PAID" ||
       statusParam === "SUCCESS";
 
-    const zinipayBaseUrl = (
-      process.env.ZINIPAY_BASE_URL || "https://api.zinipay.com/v1"
-    ).replace(/\/$/, "");
-    const apiKey = process.env.ZINIPAY_API_KEY;
+    let rawBaseUrl = (
+      process.env.ZINIPAY_BASE_URL || "https://api.zinipay.com"
+    ).trim().replace(/\/+$/, "");
+    if (!rawBaseUrl.endsWith("/v1")) {
+      rawBaseUrl = `${rawBaseUrl}/v1`;
+    }
+    const verifyEndpoint = `${rawBaseUrl}/payment/verify`;
+    const apiKey = (process.env.ZINIPAY_API_KEY || "").trim();
 
     if (
       !isVerifiedSuccess &&
@@ -445,17 +608,18 @@ export const verifyZiniPayPayment = async (
     ) {
       try {
         const verifyRes = await axios.post(
-          `${zinipayBaseUrl}/payment/verify`,
+          verifyEndpoint,
           { invoice_id: payment.invoiceId || invoiceId },
           {
             headers: {
               "Content-Type": "application/json",
+              Accept: "application/json",
               "zini-api-key": apiKey,
               "zinipay-api-key": apiKey,
               Authorization: `Bearer ${apiKey}`,
             },
             timeout: 8000,
-          }
+          },
         );
 
         const vStatus = (
@@ -472,66 +636,56 @@ export const verifyZiniPayPayment = async (
           isVerifiedSuccess = true;
           payment.gatewayResponse = verifyRes.data;
         }
-      } catch (vErr) {
-        console.error("ZiniPay verification call error:", (vErr as Error).message);
+      } catch (vErr: any) {
+        console.error("ZiniPay verification call error:", {
+          status: vErr.response?.status,
+          data: vErr.response?.data,
+          message: vErr.message,
+        });
       }
     }
 
-    // If verified or sandbox simulated success
+    // Verified or sandbox success -> Fulfill & redirect cleanly to Next.js frontend
     if (isVerifiedSuccess || statusParam === "COMPLETED") {
-      await fulfillPayment(payment, { ...req.body, ...req.query });
-
-      res.status(200).send(`
-        <div style="text-align: center; margin-top: 50px; font-family: Arial, sans-serif;">
-          <h1 style="color: #0f766e;">Payment Successful via ZiniPay! 🎉</h1>
-          <p>Transaction ID: <strong>${payment.transactionId}</strong></p>
-          <p>Amount: <strong>${payment.amount} BDT</strong></p>
-          <p>Your payment has been verified and processed successfully.</p>
-          <div style="margin-top: 25px;">
-            <a href="${frontendUrl}/dashboard" style="background-color: #0f766e; color: #ffffff; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">Go to Dashboard</a>
-          </div>
-        </div>
-      `);
+      await fulfillPayment(payment, { ...query, ...body });
+      res.redirect(
+        `${returnUrl}?payment=success&tranId=${encodeURIComponent(payment.transactionId)}`,
+      );
       return;
     }
 
-    // Failed / Cancelled
+    // Cancelled -> Redirect cleanly to Next.js frontend
     if (statusParam === "CANCELLED") {
       payment.status = "Cancelled";
       await payment.save();
-      res.status(400).send(`
-        <div style="text-align: center; margin-top: 50px; font-family: Arial, sans-serif;">
-          <h1 style="color: #f59e0b;">Payment Cancelled! ⚠️</h1>
-          <p>You have cancelled the ZiniPay payment process.</p>
-          <div style="margin-top: 20px;">
-            <a href="${frontendUrl}/dashboard" style="color: #0f766e; text-decoration: none;">Return to Dashboard</a>
-          </div>
-        </div>
-      `);
+      const cancelReturnUrl =
+        payment.paymentType === "Order"
+          ? `${frontendUrl.replace(/\/+$/, "")}/checkout`
+          : returnUrl;
+      res.redirect(
+        `${cancelReturnUrl}?payment=cancelled&tranId=${encodeURIComponent(payment.transactionId)}`,
+      );
       return;
     }
 
+    // Failed -> Redirect cleanly to Next.js frontend
     payment.status = "Failed";
     await payment.save();
-
-    res.status(400).send(`
-      <div style="text-align: center; margin-top: 50px; font-family: Arial, sans-serif;">
-        <h1 style="color: #dc2626;">Payment Verification Failed! ❌</h1>
-        <p>ZiniPay could not verify the payment transaction.</p>
-        <div style="margin-top: 20px;">
-          <a href="${frontendUrl}/dashboard" style="color: #0f766e; text-decoration: none;">Return to Dashboard</a>
-        </div>
-      </div>
-    `);
+    res.redirect(
+      `${returnUrl}?payment=failed&tranId=${encodeURIComponent(payment.transactionId)}`,
+    );
   } catch (error) {
-    res.status(500).json({ success: false, message: (error as Error).message });
+    console.error("Payment verification fatal error:", error);
+    res.redirect(
+      `${frontendUrl.replace(/\/+$/, "")}/member/billing?payment=error&message=${encodeURIComponent((error as Error).message || "Verification failed")}`,
+    );
   }
 };
 
 // ─── 3. ZiniPay Webhook / IPN Listener (POST /api/payment/zinipay/webhook) ───
 export const ziniPayWebhook = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
     const payload = req.body || {};
@@ -560,7 +714,9 @@ export const ziniPayWebhook = async (
     }
 
     if (!payment) {
-      res.status(404).json({ success: false, message: "Payment record not found." });
+      res
+        .status(404)
+        .json({ success: false, message: "Payment record not found." });
       return;
     }
 
@@ -577,17 +733,23 @@ export const ziniPayWebhook = async (
     } else if (rawStatus === "FAILED") {
       payment.status = "Failed";
       if (payment.paymentType === "Order") {
-        await Order.findByIdAndUpdate(payment.referenceId, { paymentStatus: "Failed" });
+        await Order.findByIdAndUpdate(payment.referenceId, {
+          paymentStatus: "Failed",
+        });
       }
     } else if (rawStatus === "CANCELLED") {
       payment.status = "Cancelled";
       if (payment.paymentType === "Order") {
-        await Order.findByIdAndUpdate(payment.referenceId, { paymentStatus: "Cancelled" });
+        await Order.findByIdAndUpdate(payment.referenceId, {
+          paymentStatus: "Cancelled",
+        });
       }
     }
 
     await payment.save();
-    res.status(200).json({ success: true, message: "ZiniPay webhook processed." });
+    res
+      .status(200)
+      .json({ success: true, message: "ZiniPay webhook processed." });
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
   }
@@ -596,40 +758,82 @@ export const ziniPayWebhook = async (
 // ─── 4. ZiniPay Cancel Handler ───────────────────────────────────────────────
 export const ziniPayCancel = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<void> => {
   try {
+    const query = (req.query || {}) as Record<string, any>;
+    const body = (req.body || {}) as Record<string, any>;
+
     const tranId =
-      getParam(req.query.tranId) ||
-      getParam(req.body.tran_id) ||
-      getParam(req.query.transaction_id);
+      getParam(query.tranId) ||
+      getParam(body.tran_id) ||
+      getParam(query.transaction_id) ||
+      getParam(body.transaction_id);
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    let returnUrl = `${frontendUrl.replace(/\/+$/, "")}/member/billing`;
 
     if (tranId) {
       const payment = await Payment.findOne({ transactionId: tranId });
-      if (payment && payment.status !== "Success") {
-        payment.status = "Cancelled";
-        payment.gatewayResponse = { ...req.body, ...req.query };
-        await payment.save();
+      if (payment) {
+        returnUrl =
+          payment.paymentType === "Order"
+            ? `${frontendUrl.replace(/\/+$/, "")}/checkout`
+            : getFrontendReturnUrl(frontendUrl, payment.paymentType);
+        if (payment.status !== "Success") {
+          payment.status = "Cancelled";
+          payment.gatewayResponse = { ...query, ...body };
+          await payment.save();
 
-        if (payment.paymentType === "Order") {
-          await Order.findByIdAndUpdate(payment.referenceId, {
-            paymentStatus: "Cancelled",
-          });
+          if (payment.paymentType === "Order") {
+            await Order.findByIdAndUpdate(payment.referenceId, {
+              paymentStatus: "Cancelled",
+            });
+          }
         }
       }
     }
 
-    res.status(200).send(`
-      <div style="text-align: center; margin-top: 50px; font-family: Arial, sans-serif;">
-        <h1 style="color: #f59e0b;">Payment Cancelled! ⚠️</h1>
-        <p>You have cancelled the payment process.</p>
-        <div style="margin-top: 20px;">
-          <a href="${frontendUrl}/dashboard" style="color: #0f766e; text-decoration: none; font-weight: bold;">Return to BDSisters</a>
-        </div>
-      </div>
-    `);
+    res.redirect(
+      `${returnUrl}?payment=cancelled&tranId=${encodeURIComponent(tranId || "")}`,
+    );
+  } catch (error) {
+    console.error("Payment cancel fatal error:", error);
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    res.redirect(
+      `${frontendUrl.replace(/\/+$/, "")}/member/billing?payment=cancelled`,
+    );
+  }
+};
+
+// ─── 5. User Invoices History (GET /api/payment/invoices & /api/payment/zinipay/invoices) ──
+export const getUserInvoices = async (
+  req: AuthenticatedRequest,
+  res: Response,
+): Promise<void> => {
+  try {
+    const userId = req.user?.id || (req.user as any)?._id;
+    if (!userId) {
+      res
+        .status(401)
+        .json({ success: false, message: "Authentication required." });
+      return;
+    }
+
+    const invoices = await Payment.find({
+      $or: [
+        { userId: userId as any },
+        ...(mongoose.Types.ObjectId.isValid(userId)
+          ? [{ userId: new mongoose.Types.ObjectId(userId) as any }]
+          : []),
+      ],
+    }).sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: invoices,
+      count: invoices.length,
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
   }

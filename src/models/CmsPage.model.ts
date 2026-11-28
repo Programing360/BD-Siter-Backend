@@ -20,6 +20,7 @@ export interface ICmsPage extends Document {
   metaDescription?: string;
   isPublished: boolean;
   showInNav: boolean;
+  showInHeader: boolean;
   navLabel?: string;
   navOrder: number;
   blocks: IContentBlock[];
@@ -61,6 +62,7 @@ const CmsPageSchema = new Schema<ICmsPage>(
     metaDescription: { type: String },
     isPublished: { type: Boolean, default: false },
     showInNav: { type: Boolean, default: false },
+    showInHeader: { type: Boolean, default: false },
     navLabel: { type: String },
     navOrder: { type: Number, default: 0 },
     blocks: [ContentBlockSchema],
@@ -69,6 +71,15 @@ const CmsPageSchema = new Schema<ICmsPage>(
   { timestamps: true }
 );
 
+CmsPageSchema.pre("save", function () {
+  if (this.showInHeader !== undefined && this.showInNav === undefined) {
+    this.showInNav = this.showInHeader;
+  } else if (this.showInNav !== undefined && this.showInHeader === undefined) {
+    this.showInHeader = this.showInNav;
+  }
+});
+
 CmsPageSchema.index({ isPublished: 1, showInNav: 1, navOrder: 1 });
+CmsPageSchema.index({ isPublished: 1, showInHeader: 1, navOrder: 1 });
 
 export const CmsPage = model<ICmsPage>("CmsPage", CmsPageSchema);

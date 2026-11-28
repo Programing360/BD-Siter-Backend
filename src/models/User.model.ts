@@ -72,7 +72,10 @@ export interface IUser extends Document {
 
   // Identity verification (Admin-only access for documents)
   identityVerification: {
+    docType?: "NID" | "PASSPORT" | "ACADEMIC";
+    idNumber?: string;
     nidOrPassportUrl: string;
+    backImageUrl?: string;
     verificationStatus: "Pending" | "Approved" | "Rejected";
     verificationNote?: string;
     auditLog: IVerificationAuditLog[];
@@ -96,6 +99,8 @@ export interface IUser extends Document {
   isEmailVerified: boolean;
   emailVerificationToken?: string;
   emailVerificationExpires?: Date;
+  emailVerificationOtp?: string;
+  emailVerificationOtpExpires?: Date;
 
   // Password reset
   passwordResetToken?: string;
@@ -175,7 +180,14 @@ const UserSchema = new Schema<IUser>(
     islamicDevWheelData: { type: Schema.Types.Mixed, select: false },
 
     identityVerification: {
-      nidOrPassportUrl: { type: String, required: true, select: false },
+      docType: {
+        type: String,
+        enum: ["NID", "PASSPORT", "ACADEMIC"],
+        default: "NID",
+      },
+      idNumber: { type: String, trim: true },
+      nidOrPassportUrl: { type: String, required: true },
+      backImageUrl: { type: String, trim: true },
       verificationStatus: {
         type: String,
         enum: ["Pending", "Approved", "Rejected"],
@@ -217,6 +229,8 @@ const UserSchema = new Schema<IUser>(
     isEmailVerified: { type: Boolean, default: false },
     emailVerificationToken: { type: String, select: false },
     emailVerificationExpires: { type: Date, select: false },
+    emailVerificationOtp: { type: String, select: false },
+    emailVerificationOtpExpires: { type: Date, select: false },
 
     // Password reset
     passwordResetToken: { type: String, select: false },

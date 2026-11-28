@@ -259,10 +259,45 @@ export const getAllBusinessesForAdmin = async (
   res: Response,
 ): Promise<void> => {
   try {
-    const businesses = await Business.find().populate(
-      "userId",
-      "fullName email status",
-    );
+    const rawBusinesses = await Business.find()
+      .populate("userId", "fullName email status")
+      .sort({ updatedAt: -1, createdAt: -1 });
+
+    // Deduplicate: If multiple business records exist for the same user or identical brand sets, retain only the newest valid one
+    const seenUserIds = new Set<string>();
+    const seenBrandFingerprints = new Set<string>();
+    const businesses = [];
+
+    for (const biz of rawBusinesses) {
+      const uId = biz.userId
+        ? (biz.userId as any)._id?.toString() || (biz.userId as any).toString()
+        : null;
+
+      // Brand fingerprint for seeded or duplicate business detection
+      const brandFingerprint = (biz.brands || [])
+        .map((b) => (b.brandName || "").trim().toLowerCase())
+        .sort()
+        .join("|");
+
+      // Skip duplicate business profiles for the same user
+      if (uId && seenUserIds.has(uId)) {
+        continue;
+      }
+
+      // Skip duplicate profiles having identical brand fingerprints (e.g. repeated seed runs)
+      if (brandFingerprint && seenBrandFingerprints.has(brandFingerprint)) {
+        continue;
+      }
+
+      if (uId) {
+        seenUserIds.add(uId);
+      }
+      if (brandFingerprint) {
+        seenBrandFingerprints.add(brandFingerprint);
+      }
+
+      businesses.push(biz);
+    }
 
     res.status(200).json({
       success: true,

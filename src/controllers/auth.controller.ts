@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Request, Response, CookieOptions } from "express";
 import bcrypt from "bcrypt";
 import jwt, { SignOptions } from "jsonwebtoken";
 import crypto from "crypto";
@@ -18,6 +18,18 @@ import {
 import { sendEmail, emailTemplates } from "../utils/sendEmail";
 import { generateProfilePdfBuffer } from "../utils/pdfGenerator";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
+
+// ─── Cookie Options Helper ────────────────────────────────────────────────────
+const getAuthCookieOptions = (): CookieOptions => {
+  const isProd = process.env.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    path: "/",
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  };
+};
 
 // Normalize legacy/lowercase roles to match User.model.ts enum
 const normalizeUserRole = (user: any) => {
@@ -53,15 +65,22 @@ export const registerUser = async (
 
     const {
       fullName,
+      name,
       email,
       password,
       district,
       state,
       country,
       nidOrPassportUrl,
+      docType,
+      idNumber,
+      backImageUrl,
     } = validationResult.data;
 
-    console.log(validationResult);
+    const resolvedFullName = (fullName || name || req.body.fullName || req.body.name || "").trim();
+    const resolvedDocType = docType || req.body.docType || "NID";
+    const resolvedIdNumber = (idNumber || req.body.idNumber || "").trim();
+    const resolvedBackImageUrl = backImageUrl || req.body.backImageUrl || undefined;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -86,13 +105,16 @@ export const registerUser = async (
 
     // Create new user instance
     const newUser = new User({
-      fullName,
+      fullName: resolvedFullName,
       email,
       password: hashedPassword,
       location: { district, state, country },
       contactInfo: { emails: [email], isPrivate: true },
       identityVerification: {
+        docType: resolvedDocType,
+        idNumber: resolvedIdNumber,
         nidOrPassportUrl,
+        backImageUrl: resolvedBackImageUrl,
         verificationStatus: totalUsers === 0 ? "Approved" : "Pending",
       },
       referredBy,
@@ -101,19 +123,22 @@ export const registerUser = async (
       isEmailVerified: totalUsers === 0, // auto-verify first user
     });
 
-    // Generate email verification token if not first user
+    // Generate email verification token & 6-digit OTP if not first user
     let rawVerificationToken = "";
+    let generatedOtp = "";
     if (totalUsers > 0) {
+      generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+      newUser.emailVerificationOtp = generatedOtp;
+      newUser.emailVerificationOtpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
       rawVerificationToken = newUser.generateEmailVerificationToken();
     }
 
     await newUser.save();
 
-    // Send verification email
-    if (rawVerificationToken) {
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-      const verifyUrl = `${frontendUrl}/verify-email?token=${rawVerificationToken}`;
-      const template = emailTemplates.verifyEmail(newUser.fullName, verifyUrl);
+    // Send verification email with 6-digit OTP
+    if (generatedOtp) {
+      console.log(`[OTP Dispatch] Sending OTP to ${newUser.email} (Code: ${generatedOtp})`);
+      const template = emailTemplates.verifyOtp(newUser.fullName, generatedOtp);
 
       try {
         await sendEmail({
@@ -122,9 +147,10 @@ export const registerUser = async (
           html: template.html,
           text: template.text,
         });
+        console.log(`[OTP Dispatch] Successfully dispatched verification OTP to ${newUser.email}`);
       } catch (emailErr) {
         console.error(
-          "Failed to send verification email:",
+          `[OTP Dispatch Error] Failed to send OTP email to ${newUser.email}:`,
           (emailErr as Error).message,
         );
       }
@@ -135,7 +161,7 @@ export const registerUser = async (
       message:
         totalUsers === 0
           ? "First user registered successfully as SuperAdmin!"
-          : "Registration successful! Please check your email to verify your address. Your account is pending admin approval.",
+          : "Registration successful! A 6-digit verification code has been sent to your email.",
       data: {
         id: newUser._id,
         fullName: newUser.fullName,
@@ -150,6 +176,7 @@ export const registerUser = async (
     res.status(500).json({ success: false, message: (error as Error).message });
   }
 };
+
 // ─── Resend Verification Email Controller ────────────────────────────────────
 export const resendVerificationEmail = async (
   req: Request,
@@ -167,12 +194,11 @@ export const resendVerificationEmail = async (
     const { email } = validationResult.data;
     const user = await User.findOne({ email: email.toLowerCase().trim() });
 
-    // সিকিউরিটির জন্য ইউজার না থাকলেও জেনেরিক সাকসেস মেসেজ রিটার্ন করা ভালো
     if (!user) {
       res.status(200).json({
         success: true,
         message:
-          "If that email is registered, a verification link has been sent.",
+          "If that email is registered, a verification code has been sent.",
       });
       return;
     }
@@ -185,25 +211,40 @@ export const resendVerificationEmail = async (
       return;
     }
 
-    // নতুন ভেরিফিকেশন টোকেন জেনারেট ও সেভ করা
+    // Generate fresh 6-digit OTP (10 mins) and token
+    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.emailVerificationOtp = generatedOtp;
+    user.emailVerificationOtpExpires = new Date(Date.now() + 10 * 60 * 1000);
     const rawVerificationToken = user.generateEmailVerificationToken();
     await user.save();
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    const verifyUrl = `${frontendUrl}/verify-email?token=${rawVerificationToken}`;
-    const template = emailTemplates.verifyEmail(user.fullName, verifyUrl);
+    console.log(`[OTP Dispatch] Sending OTP to ${user.email} (Code: ${generatedOtp})`);
+    const template = emailTemplates.verifyOtp(user.fullName, generatedOtp);
 
-    await sendEmail({
-      to: user.email,
-      subject: template.subject,
-      html: template.html,
-      text: template.text,
-    });
+    try {
+      await sendEmail({
+        to: user.email,
+        subject: template.subject,
+        html: template.html,
+        text: template.text,
+      });
+      console.log(`[OTP Dispatch] Successfully dispatched fresh OTP to ${user.email}`);
 
-    res.status(200).json({
-      success: true,
-      message: "Verification email sent! Please check your inbox.",
-    });
+      res.status(200).json({
+        success: true,
+        message: "Verification code sent! Please check your email inbox.",
+      });
+    } catch (emailErr) {
+      console.error(
+        `[OTP Dispatch Error] Failed to send OTP to ${user.email}:`,
+        (emailErr as Error).message,
+      );
+
+      res.status(500).json({
+        success: false,
+        message: `Failed to deliver verification email: ${(emailErr as Error).message || "SMTP error"}`,
+      });
+    }
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
   }
@@ -255,8 +296,6 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       });
       return;
     }
-
-    console.log(user);
 
     // Status security checks
     if (user.status === "Pending") {
@@ -312,6 +351,9 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       { expiresIn },
     );
 
+    // Set secure HttpOnly cookie directly from backend
+    res.cookie("token", token, getAuthCookieOptions());
+
     res.status(200).json({
       success: true,
       message: `Welcome back, ${user.fullName}! Login successful.`,
@@ -337,7 +379,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-// ─── Verify Email Controller ──────────────────────────────────────────────────
+// ─── Verify Email Controller (Supports 6-Digit OTP and Legacy Token) ─────────
 export const verifyEmail = async (
   req: Request,
   res: Response,
@@ -351,30 +393,97 @@ export const verifyEmail = async (
       return;
     }
 
-    const { token } = validationResult.data;
-    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    const { token, otp, email } = validationResult.data;
+    let user: any = null;
 
-    const user = await User.findOne({
-      emailVerificationToken: hashedToken,
-      emailVerificationExpires: { $gt: new Date() },
-    }).select("+emailVerificationToken +emailVerificationExpires");
+    if (otp && email) {
+      // 1. Verify via 6-Digit OTP
+      const cleanEmail = email.toLowerCase().trim();
+      const cleanOtp = otp.trim();
 
-    if (!user) {
+      user = await User.findOne({
+        email: cleanEmail,
+        emailVerificationOtp: cleanOtp,
+        emailVerificationOtpExpires: { $gt: new Date() },
+      }).select("+emailVerificationOtp +emailVerificationOtpExpires");
+
+      if (!user) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid or expired 6-digit verification code. Please request a new code.",
+        });
+        return;
+      }
+    } else if (token) {
+      // 2. Verify via Legacy Link Token
+      const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
+      user = await User.findOne({
+        emailVerificationToken: hashedToken,
+        emailVerificationExpires: { $gt: new Date() },
+      }).select("+emailVerificationToken +emailVerificationExpires");
+
+      if (!user) {
+        res.status(400).json({
+          success: false,
+          message: "Invalid or expired email verification link.",
+        });
+        return;
+      }
+    } else {
       res.status(400).json({
         success: false,
-        message: "Invalid or expired email verification link.",
+        message: "Please provide either your 6-digit verification code or token.",
       });
       return;
     }
 
+    // Mark email as verified and clear OTP/token fields
     user.isEmailVerified = true;
+    user.emailVerificationOtp = undefined;
+    user.emailVerificationOtpExpires = undefined;
     user.emailVerificationToken = undefined;
     user.emailVerificationExpires = undefined;
     await user.save();
 
+    // Auto-login: Sign JWT & set HttpOnly cookie
+    const jwtSecret = process.env.JWT_SECRET;
+    let authToken = "";
+    if (jwtSecret) {
+      const expiresIn = (process.env.JWT_EXPIRES_IN || "7d") as SignOptions["expiresIn"];
+      authToken = jwt.sign(
+        {
+          id: user._id,
+          role: user.role,
+          status: user.status,
+        },
+        jwtSecret,
+        { expiresIn },
+      );
+      res.cookie("token", authToken, getAuthCookieOptions());
+    }
+
     res.status(200).json({
       success: true,
       message: "Email address verified successfully!",
+      token: authToken,
+      data: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+        referralCode: user.referralCode,
+        profilePicture: user.profilePicture,
+        isEmailVerified: user.isEmailVerified,
+      },
+      user: {
+        id: user._id,
+        fullName: user.fullName,
+        email: user.email,
+        role: user.role,
+        status: user.status,
+      },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
@@ -398,7 +507,6 @@ export const forgotPassword = async (
     const { email } = validationResult.data;
     const user = await User.findOne({ email });
 
-    // Always respond with success to avoid email enumeration
     if (!user) {
       res.status(200).json({
         success: true,
@@ -487,9 +595,20 @@ export const resetPassword = async (
 
 // ─── Logout Controller ────────────────────────────────────────────────────────
 export const logoutUser = async (
-  req: Request,
+  _req: Request,
   res: Response,
 ): Promise<void> => {
+  const isProd = process.env.NODE_ENV === "production";
+  const clearOptions: CookieOptions = {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    path: "/",
+  };
+
+  res.clearCookie("token", clearOptions);
+  res.clearCookie("auth_token", clearOptions);
+
   res.status(200).json({
     success: true,
     message: "Logged out successfully.",

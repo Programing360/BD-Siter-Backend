@@ -1,4 +1,4 @@
-import { Response } from "express";
+import { Request, Response } from "express";
 import mongoose from "mongoose";
 import { Business } from "../models/Business.model";
 import { User } from "../models/User.model";
@@ -8,6 +8,128 @@ import {
   updateBrandSchema,
   clickWebsiteLinkSchema,
 } from "../validations/business.validation";
+
+// ─── 0. Get All Public Businesses (GET / or GET /api/businesses) ──────────────
+export const getPublicBusinesses = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { search, category, userId } = req.query;
+
+    // Requirement: return all business profiles where subscriptionStatus === "Paid"
+    // OR isPublished === true OR status === "Approved" (or has published brands)
+    const queryConditions: any[] = [
+      {
+        $or: [
+          { subscriptionStatus: "Paid" },
+          { isPublished: true },
+          { status: "Approved" },
+          { "brands.isPublished": true },
+        ],
+      },
+    ];
+
+    if (userId && typeof userId === "string" && mongoose.Types.ObjectId.isValid(userId)) {
+      queryConditions.push({ userId: new mongoose.Types.ObjectId(userId) });
+    }
+
+    if (search && typeof search === "string" && search.trim()) {
+      const s = search.trim();
+      const regex = new RegExp(s, "i");
+      queryConditions.push({
+        $or: [
+          { "brands.brandName": regex },
+          { "brands.businessSummary": regex },
+          { "brands.servicesOrProducts": regex },
+          { "brands.category": regex },
+          { businessSummary: regex },
+        ],
+      });
+    }
+
+    if (category && typeof category === "string" && category.trim()) {
+      const c = category.trim();
+      const regex = new RegExp(c, "i");
+      queryConditions.push({
+        $or: [
+          { "brands.category": regex },
+          { "brands.servicesOrProducts": regex },
+        ],
+      });
+    }
+
+    const filter =
+      queryConditions.length > 1 ? { $and: queryConditions } : queryConditions[0];
+
+    const rawBusinesses = await Business.find(filter)
+      .populate("userId", "fullName email profilePicture role location status")
+      .sort({ updatedAt: -1, createdAt: -1 });
+
+    // Deduplicate profiles (if duplicate seed records exist for the same user or brand fingerprints)
+    const seenUserIds = new Set<string>();
+    const seenBrandFingerprints = new Set<string>();
+    const businesses = [];
+
+    for (const biz of rawBusinesses) {
+      const uId = biz.userId
+        ? (biz.userId as any)._id?.toString() || (biz.userId as any).toString()
+        : null;
+
+      const brandFingerprint = (biz.brands || [])
+        .map((b) => (b.brandName || "").trim().toLowerCase())
+        .sort()
+        .join("|");
+
+      if (uId && seenUserIds.has(uId)) {
+        continue;
+      }
+      if (brandFingerprint && seenBrandFingerprints.has(brandFingerprint)) {
+        continue;
+      }
+
+      if (uId) seenUserIds.add(uId);
+      if (brandFingerprint) seenBrandFingerprints.add(brandFingerprint);
+
+      // Return published brands (or all brands if profile itself is Paid/Approved)
+      const isPaidOrApproved =
+        biz.subscriptionStatus === "Paid" ||
+        (biz as any).status === "Approved" ||
+        (biz as any).isPublished === true;
+
+      const bizObj: any = biz.toObject();
+      if (!isPaidOrApproved) {
+        bizObj.brands = (bizObj.brands || []).filter((b: any) => b.isPublished);
+      }
+
+      // Ensure website links, direct URL accessibility, and real affiliate clicks
+      if (Array.isArray(bizObj.brands)) {
+        bizObj.brands = bizObj.brands.map((b: any) => {
+          const brandIdStr = (b._id as any)?.toString();
+          const clicksForBrand = (biz.websiteLinkClicks || [])
+            .filter((c: any) => c.brandId?.toString() === brandIdStr)
+            .reduce((sum: number, c: any) => sum + (c.clickCount || 0), 0);
+
+          return {
+            ...b,
+            websiteUrl: b.websiteLinks?.[0] || b.websiteUrl || "",
+            affiliateClicks: b.affiliateClicks ?? clicksForBrand,
+          };
+        });
+      }
+
+      businesses.push(bizObj);
+    }
+
+    res.status(200).json({
+      success: true,
+      count: businesses.length,
+      data: businesses,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
 
 // ─── 1. Create or Add Brands to Business Profile (POST /create) ───────────────
 export const createOrUpdateBusiness = async (
@@ -126,7 +248,7 @@ export const getBusinessById = async (
 
     const business = await Business.findById(id).populate(
       "userId",
-      "fullName profilePicture role location"
+      "fullName email profilePicture role location"
     );
 
     if (!business) {
@@ -134,7 +256,11 @@ export const getBusinessById = async (
       return;
     }
 
-    const isOwner = req.user && req.user.id === business.userId._id.toString();
+    const isOwner =
+      req.user &&
+      business.userId &&
+      ((business.userId as any)._id?.toString() === req.user.id ||
+        (business.userId as any).toString() === req.user.id);
     const isAdmin =
       req.user && (req.user.role === "Admin" || req.user.role === "SuperAdmin");
 
@@ -297,17 +423,18 @@ export const deleteBrand = async (
   }
 };
 
-// ─── 6. Track Website Link Click (POST /:id/brands/:brandId/click) ───────────
+// ─── 6. Track Website Link Click (POST /:id/brands/:brandId/click or POST /brands/:brandId/click) ───────────
 export const trackWebsiteLinkClick = async (
   req: AuthenticatedRequest,
   res: Response
 ): Promise<void> => {
   try {
-    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const brandId = Array.isArray(req.params.brandId) ? req.params.brandId[0] : req.params.brandId;
+    const idParam = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const brandIdParam = Array.isArray(req.params.brandId) ? req.params.brandId[0] : req.params.brandId;
+    const brandId = brandIdParam || idParam;
 
-    if (!id || !brandId || !mongoose.Types.ObjectId.isValid(id) || !mongoose.Types.ObjectId.isValid(brandId)) {
-      res.status(400).json({ success: false, message: "Invalid ID format." });
+    if (!brandId || !mongoose.Types.ObjectId.isValid(brandId)) {
+      res.status(400).json({ success: false, message: "Invalid brand ID format." });
       return;
     }
 
@@ -319,9 +446,12 @@ export const trackWebsiteLinkClick = async (
       return;
     }
 
-    const { url } = validationResult.data;
+    // Locate the business either by business ID or by containing brand ID
+    const business =
+      idParam && idParam !== brandId && mongoose.Types.ObjectId.isValid(idParam)
+        ? await Business.findById(idParam)
+        : await Business.findOne({ "brands._id": brandId });
 
-    const business = await Business.findById(id);
     if (!business) {
       res.status(404).json({ success: false, message: "Business not found." });
       return;
@@ -333,10 +463,15 @@ export const trackWebsiteLinkClick = async (
       return;
     }
 
+    const targetUrl =
+      validationResult.data?.url ||
+      brand.websiteLinks?.[0] ||
+      "https://bdsisters.org";
+
     // Check if click tracker already exists for this brand & url
     const objectBrandId = new mongoose.Types.ObjectId(brandId);
     let clickRecord = business.websiteLinkClicks.find(
-      (c) => c.brandId?.toString() === brandId && c.url === url
+      (c) => c.brandId?.toString() === brandId && c.url === targetUrl
     );
 
     if (clickRecord) {
@@ -345,7 +480,7 @@ export const trackWebsiteLinkClick = async (
     } else {
       business.websiteLinkClicks.push({
         brandId: objectBrandId,
-        url,
+        url: targetUrl,
         clickCount: 1,
         lastClickedAt: new Date(),
       });
@@ -359,9 +494,118 @@ export const trackWebsiteLinkClick = async (
       message: "Click tracked successfully.",
       data: {
         brandId,
-        url,
+        url: targetUrl,
         clickCount: clickRecord.clickCount,
       },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
+
+// ─── 7. Get Public Brand Detail by Slug or ID (GET /brands/:slugOrId) ─────────
+export const getBrandBySlugOrId = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const slugOrId = Array.isArray(req.params.slugOrId)
+      ? req.params.slugOrId[0]
+      : req.params.slugOrId;
+
+    if (!slugOrId) {
+      res.status(400).json({ success: false, message: "Brand identifier is required." });
+      return;
+    }
+
+    const isObjectId = mongoose.Types.ObjectId.isValid(slugOrId);
+    let business: any = null;
+    let targetBrand: any = null;
+
+    if (isObjectId) {
+      business = await Business.findOne({ "brands._id": slugOrId }).populate(
+        "userId",
+        "fullName email profilePicture role location"
+      );
+      if (business) {
+        targetBrand = business.brands.id(slugOrId);
+      }
+    }
+
+    if (!targetBrand) {
+      // Find by matching slug or name across all businesses
+      const allBusinesses = await Business.find().populate(
+        "userId",
+        "fullName email profilePicture role location"
+      );
+
+      const normalizedQuery = slugOrId.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+      for (const biz of allBusinesses) {
+        for (const brand of biz.brands) {
+          const brandNameNorm = (brand.brandName || "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]/g, "");
+          const brandIdStr = (brand._id as any)?.toString() || "";
+
+          if (
+            brandNameNorm === normalizedQuery ||
+            brandIdStr === slugOrId ||
+            (brand.brandName &&
+              brand.brandName.toLowerCase() === slugOrId.toLowerCase())
+          ) {
+            business = biz;
+            targetBrand = brand;
+            break;
+          }
+        }
+        if (targetBrand) break;
+      }
+    }
+
+    if (!business || !targetBrand) {
+      res.status(404).json({ success: false, message: "Brand not found." });
+      return;
+    }
+
+    // Calculate link clicks for this brand
+    const brandIdStr = (targetBrand._id as any)?.toString();
+    const clicksForBrand = (business.websiteLinkClicks || [])
+      .filter((c: any) => c.brandId?.toString() === brandIdStr)
+      .reduce((sum: number, c: any) => sum + (c.clickCount || 0), 0);
+
+    const founder = business.userId as any;
+
+    const brandData = {
+      _id: targetBrand._id,
+      brandId: targetBrand._id,
+      businessId: business._id,
+      brandName: targetBrand.brandName,
+      roleInBusiness: targetBrand.roleInBusiness,
+      customRoleTitle: targetBrand.customRoleTitle,
+      contactInfo: targetBrand.contactInfo || {},
+      businessSummary: targetBrand.businessSummary,
+      servicesOrProducts: targetBrand.servicesOrProducts || [],
+      portfolioOrGallery: targetBrand.portfolioOrGallery || [],
+      testimonialsAndReviews: targetBrand.testimonialsAndReviews || [],
+      websiteLinks: targetBrand.websiteLinks || [],
+      websiteUrl: targetBrand.websiteLinks?.[0] || "",
+      isPublished: targetBrand.isPublished,
+      affiliateClicks: clicksForBrand,
+      founder: {
+        _id: founder?._id,
+        fullName: founder?.fullName || "Sister Entrepreneur",
+        email: founder?.email,
+        profilePicture: founder?.profilePicture,
+        location: founder?.location,
+      },
+      subscriptionStatus: business.subscriptionStatus,
+      createdAt: targetBrand.createdAt || business.createdAt,
+    };
+
+    res.status(200).json({
+      success: true,
+      data: brandData,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });

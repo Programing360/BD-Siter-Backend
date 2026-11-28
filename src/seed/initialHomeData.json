@@ -1,0 +1,670 @@
+{
+  "cmsBlocks": [
+    {
+      "sectionKey": "hero",
+      "blockType": "hero",
+      "title": "Empowering Bangladeshi Muslim Women Through Faith, Skill & Sisterhood",
+      "subtitle": "A safe, verified digital ecosystem where sisters connect across disciplines, showcase ethical businesses, shop with exclusive discounts, and grow spiritually and professionally.",
+      "content": "BDSisters.org is the premier unified database and collaborative platform designed exclusively for Muslim sisters under the umbrella of Muhsina Organization. It combines safe community networking, verified professional and personal profiles, and halal e-commerce.",
+      "order": 0,
+      "isPublished": true,
+      "ctaText": "Join Sisterhood Free",
+      "ctaLink": "/register",
+      "hoverTooltip": "100% Identity-Verified Women-Only Sanctuary",
+      "metadata": {
+        "islamicOrSisterhoodNote": "Adhering to Islamic principles of trust (Amanah), sisterhood, and mutual empowerment.",
+        "howItWorks": [
+          "Referral-only registration vetted by existing trusted members",
+          "Field-level privacy controls giving each sister total ownership of her data",
+          "Seamless integration with Muhsina Organization wings (CoP, TSPP, MIDJ, The Hut Network)"
+        ]
+      }
+    },
+    {
+      "sectionKey": "wings",
+      "blockType": "wing",
+      "title": "Circle of Parents",
+      "subtitle": "Parenting & Homeschooling Discussions",
+      "content": "Synergizes parenting circles, curriculum guidance, and child-rearing forums.",
+      "order": 1,
+      "isPublished": true,
+      "ctaLink": "#cop-wing",
+      "metadata": {
+        "id": "cop",
+        "code": "CoP",
+        "name": "Circle of Parents",
+        "tagline": "Parenting & Homeschooling Discussions",
+        "roleInBDSisters": "Synergizes parenting circles, curriculum guidance, and child-rearing forums.",
+        "iconName": "Baby",
+        "badgeColor": "bg-[#5B9891]/15 text-[#111E28] border-[#5B9891]/30",
+        "linkUrl": "#cop-wing"
+      }
+    },
+    {
+      "sectionKey": "wings",
+      "blockType": "wing",
+      "title": "The Sacred Path Publications",
+      "subtitle": "Publications & Downloadable Resources",
+      "content": "Distributes authentic Islamic literature, research papers, and ebooks.",
+      "order": 2,
+      "isPublished": true,
+      "ctaLink": "#tspp-wing",
+      "metadata": {
+        "id": "tspp",
+        "code": "TSPP",
+        "name": "The Sacred Path Publications",
+        "tagline": "Publications & Downloadable Resources",
+        "roleInBDSisters": "Distributes authentic Islamic literature, research papers, and ebooks.",
+        "iconName": "BookOpen",
+        "badgeColor": "bg-[#F2B55D]/25 text-[#D98408] border-[#F2B55D]/40",
+        "linkUrl": "#tspp-wing"
+      }
+    },
+    {
+      "sectionKey": "wings",
+      "blockType": "wing",
+      "title": "Muhsina Intellectual Dialogue & Journalism",
+      "subtitle": "Featured Contributors & Thought Leadership",
+      "content": "Showcases opinion pieces, creative writing, and academic articles by sisters.",
+      "order": 3,
+      "isPublished": true,
+      "ctaLink": "#midj-wing",
+      "metadata": {
+        "id": "midj",
+        "code": "MIDJ",
+        "name": "Muhsina Intellectual Dialogue & Journalism",
+        "tagline": "Featured Contributors & Thought Leadership",
+        "roleInBDSisters": "Showcases opinion pieces, creative writing, and academic articles by sisters.",
+        "iconName": "PenTool",
+        "badgeColor": "bg-[#F7DFC7] text-[#111E28] border-[#F7DFC7]",
+        "linkUrl": "#midj-wing"
+      }
+    },
+    {
+      "sectionKey": "wings",
+      "blockType": "wing",
+      "title": "The Hut Halal Network",
+      "subtitle": "Vendor Registrations & Halal Artisan Guild",
+      "content": "Empowers home-based makers, artisans, and women-led suppliers.",
+      "order": 4,
+      "isPublished": true,
+      "ctaLink": "#hut-network",
+      "metadata": {
+        "id": "hut",
+        "code": "The Hut Network",
+        "name": "The Hut Halal Network",
+        "tagline": "Vendor Registrations & Halal Artisan Guild",
+        "roleInBDSisters": "Empowers home-based makers, artisans, and women-led suppliers.",
+        "iconName": "Store",
+        "badgeColor": "bg-[#5B9891]/20 text-[#111E28] border-[#5B9891]/40",
+        "linkUrl": "#hut-network"
+      }
+    },
+    {
+      "sectionKey": "wings",
+      "blockType": "wing",
+      "title": "Islamic Mentorship & Capacity Building",
+      "subtitle": "Sisterhood Skills & Development",
+      "content": "Connects aspiring sisters with established role models for career guidance.",
+      "order": 5,
+      "isPublished": true,
+      "ctaLink": "#imbd-wing",
+      "metadata": {
+        "id": "imbd",
+        "code": "IMBD",
+        "name": "Islamic Mentorship & Capacity Building",
+        "tagline": "Sisterhood Skills & Development",
+        "roleInBDSisters": "Connects aspiring sisters with established role models for career guidance.",
+        "iconName": "Compass",
+        "badgeColor": "bg-[#D98408]/15 text-[#111E28] border-[#D98408]/30",
+        "linkUrl": "#imbd-wing"
+      }
+    },
+    {
+      "sectionKey": "keyAreas",
+      "blockType": "keyArea",
+      "title": "Personal Profiles for Sisters",
+      "subtitle": "সিস্টার্সদের ব্যক্তিগত প্রোফাইল",
+      "content": "Verified profile with rigorous field-level privacy, vocational skill bars, and goal tracker.",
+      "order": 1,
+      "isPublished": true,
+      "metadata": {
+        "id": 1,
+        "banglaTitle": "সিস্টার্সদের ব্যক্তিগত প্রোফাইল",
+        "icon": "UserCheck",
+        "features": [
+          "Square profile photo & bio",
+          "District/Country level location only",
+          "Private-by-default contact details",
+          "One-click PDF download"
+        ]
+      }
+    },
+    {
+      "sectionKey": "keyAreas",
+      "blockType": "keyArea",
+      "title": "Business Profiles of Goods & Services",
+      "subtitle": "হালাল ব্যবসা ও সার্ভিসের প্রোফাইল",
+      "content": "Showcase multiple brands owned by a sister with role designation and portfolio showcases.",
+      "order": 2,
+      "isPublished": true,
+      "metadata": {
+        "id": 2,
+        "banglaTitle": "হালাল ব্যবসা ও সার্ভিসের প্রোফাইল",
+        "icon": "Briefcase",
+        "features": [
+          "Link multiple brands to one sister",
+          "Custom role assignment (Founder, CEO, Artisan)",
+          "Direct showcase of services and catalog",
+          "Commission-tracked outbound link support"
+        ]
+      }
+    },
+    {
+      "sectionKey": "keyAreas",
+      "blockType": "keyArea",
+      "title": "Online Shopping (E-Commerce)",
+      "subtitle": "বিশ্বস্ত অনলাইন শপিং",
+      "content": "Shop directly by product, service, brand, or individual sister profile with MRP protection.",
+      "order": 3,
+      "isPublished": true,
+      "metadata": {
+        "id": 3,
+        "banglaTitle": "বিশ্বস্ত অনলাইন শপিং",
+        "icon": "ShoppingBag",
+        "features": [
+          "MRP guarantee (equal or lower than outside)",
+          "Member-only special discounts",
+          "Separate wholesale tier pricing",
+          "Integrated ZiniPay checkout"
+        ]
+      }
+    },
+    {
+      "sectionKey": "keyAreas",
+      "blockType": "keyArea",
+      "title": "Constructive Discussion Forums",
+      "subtitle": "গঠনমূলক ও উপকারী ফোরাম",
+      "content": "Moderated safe sanctuary for meaningful discussions on faith, parenting, and wellness.",
+      "order": 4,
+      "isPublished": true,
+      "metadata": {
+        "id": 4,
+        "banglaTitle": "গঠনমূলক ও উপকারী ফোরাম",
+        "icon": "MessageSquare",
+        "features": [
+          "5 Core focus categories",
+          "Threaded & safe conversations",
+          "Guest teaser with free member unlock",
+          "Strict sister-moderated privacy"
+        ]
+      }
+    },
+    {
+      "sectionKey": "keyAreas",
+      "blockType": "keyArea",
+      "title": "Skill Exchange & Barter",
+      "subtitle": "দক্ষতা বিনিময় ও শেয়ারিং",
+      "content": "Exchange vocational, language, and software skills directly between community members.",
+      "order": 5,
+      "isPublished": true,
+      "metadata": {
+        "id": 5,
+        "banglaTitle": "দক্ষতা বিনিময় ও শেয়ারিং",
+        "icon": "Sparkles",
+        "features": [
+          "Ask & Offer matching board",
+          "Vocational skill bars by genre",
+          "Barter knowledge without money barriers",
+          "Sister-to-sister peer feedback"
+        ]
+      }
+    },
+    {
+      "sectionKey": "keyAreas",
+      "blockType": "keyArea",
+      "title": "Tutorials & Courses",
+      "subtitle": "টিউটোরিয়াল ও অনলাইন কোর্স",
+      "content": "Structured learning modules on Islamic development, parenting, coding, and entrepreneurship.",
+      "order": 6,
+      "isPublished": true,
+      "metadata": {
+        "id": 6,
+        "banglaTitle": "টিউটোরিয়াল ও অনলাইন কোর্স",
+        "icon": "GraduationCap",
+        "features": [
+          "Step-by-step masterclasses",
+          "Resource handouts & quizzes",
+          "Sisterhood study circles",
+          "Certificates of completion"
+        ]
+      }
+    },
+    {
+      "sectionKey": "keyAreas",
+      "blockType": "keyArea",
+      "title": "Part-time & Project Tasks",
+      "subtitle": "পার্ট-টাইম ও প্রজেক্ট ভিত্তিক কাজ",
+      "content": "Find remote, halal, and flexible freelance work posted by sister entrepreneurs.",
+      "order": 7,
+      "isPublished": true,
+      "metadata": {
+        "id": 7,
+        "banglaTitle": "পার্ট-টাইম ও প্রজেক্ট ভিত্তিক কাজ",
+        "icon": "ClipboardCheck",
+        "features": [
+          "Flexible halal work arrangements",
+          "Virtual assistant, design & content gigs",
+          "Transparent milestone payments",
+          "Safe dispute resolution"
+        ]
+      }
+    },
+    {
+      "sectionKey": "keyAreas",
+      "blockType": "keyArea",
+      "title": "Community Welfare & Sadaqah",
+      "subtitle": "কমিউনিটি কল্যাণ ও সাদাকাহ উদ্যোগ",
+      "content": "Collaborate on charity drives, mutual aid, emergency relief, and sister support funds.",
+      "order": 8,
+      "isPublished": true,
+      "metadata": {
+        "id": 8,
+        "banglaTitle": "কমিউনিটি কল্যাণ ও সাদাকাহ উদ্যোগ",
+        "icon": "HeartHandshake",
+        "features": [
+          "100% transparent tracking",
+          "Sister-to-sister emergency assistance",
+          "Scholarship funds for learners",
+          "Vetted beneficiary verification"
+        ]
+      }
+    },
+    {
+      "sectionKey": "sectionExplainers",
+      "blockType": "explainer",
+      "title": "hero",
+      "subtitle": "About BDSisters.org Platform",
+      "content": "BDSisters.org is the premier unified database and collaborative platform designed exclusively for Muslim sisters under the umbrella of Muhsina Organization. It combines safe community networking, verified professional and personal profiles, and halal e-commerce.",
+      "order": 1,
+      "isPublished": true,
+      "metadata": {
+        "islamicOrSisterhoodNote": "Adhering to Islamic principles of trust (Amanah), sisterhood, and mutual empowerment.",
+        "howItWorks": [
+          "Referral-only registration vetted by existing trusted members",
+          "Field-level privacy controls giving each sister total ownership of her data",
+          "Seamless integration with Muhsina Organization wings (CoP, TSPP, MIDJ, The Hut Network)"
+        ]
+      }
+    },
+    {
+      "sectionKey": "sectionExplainers",
+      "blockType": "explainer",
+      "title": "wings",
+      "subtitle": "The Unified Wings of Muhsina Organization",
+      "content": "Your BDSisters profile acts as a single, verified master identity (Unified Database) powering your participation across all collaborative wings.",
+      "order": 2,
+      "isPublished": true,
+      "metadata": {
+        "howItWorks": [
+          "One single profile creates credentials across all specialized wings",
+          "Enlist roles you play across community, homeschooling, research, and publications",
+          "Centralized vetting ensures a safe, non-toxic environment across all services"
+        ]
+      }
+    },
+    {
+      "sectionKey": "sectionExplainers",
+      "blockType": "explainer",
+      "title": "keyAreas",
+      "subtitle": "The 8 Core Pillars of BDSisters",
+      "content": "A complete ecosystem built to support a sister's holistic life: personal growth, halal livelihood, parenting, mentorship, and community service.",
+      "order": 3,
+      "isPublished": true,
+      "metadata": {
+        "howItWorks": [
+          "Sisters can start free with personal profiles and forum participation",
+          "Entrepreneurs can launch verified business profiles and e-commerce shops",
+          "Learners and instructors can exchange vocational and intellectual skills"
+        ]
+      }
+    },
+    {
+      "sectionKey": "sectionExplainers",
+      "blockType": "explainer",
+      "title": "shop",
+      "subtitle": "Halal E-Commerce & Business Directory",
+      "content": "Shop high-quality halal goods, artisanal creations, and professional services offered by verified sisters and brands.",
+      "order": 4,
+      "isPublished": true,
+      "metadata": {
+        "howItWorks": [
+          "Every seller is a vetted sister with an approved personal profile",
+          "Fair pricing rule: MRP is guaranteed equal or lower than other public platforms",
+          "Dual rating system: Rate individual products as well as brand service reputation",
+          "Direct wholesale support for sister-led retail networks"
+        ]
+      }
+    },
+    {
+      "sectionKey": "sectionExplainers",
+      "blockType": "explainer",
+      "title": "forums",
+      "subtitle": "Safe & Moderated Discussion Forums",
+      "content": "Constructive, non-toxic, and beneficial conversations centered on faith, family, business, and health.",
+      "order": 5,
+      "isPublished": true,
+      "metadata": {
+        "howItWorks": [
+          "Guests can preview introductory snippets but must join free to participate",
+          "Free Members can read discussions and access wisdom archives",
+          "Paid Members can initiate new threads, ask questions, and lead dialogues",
+          "Active sister-moderators safeguard against harmful content and spam"
+        ]
+      }
+    },
+    {
+      "sectionKey": "sectionExplainers",
+      "blockType": "explainer",
+      "title": "profileEngine",
+      "subtitle": "Sister Profile Builder & Development Wheel",
+      "content": "A structured tool to map your vocational capabilities, education, and spiritual milestones while keeping personal contact details strictly private.",
+      "order": 6,
+      "isPublished": true,
+      "metadata": {
+        "howItWorks": [
+          "Contact details (Phone, WhatsApp, Emails) are private by default",
+          "Internal development frameworks (80/20 Chart & Islamized Wheel) remain 100% private",
+          "Dynamic Vocational Skill Bars reflect real-world technical and creative proficiency",
+          "Download a professional, elegantly formatted PDF CV of your profile"
+        ]
+      }
+    },
+    {
+      "sectionKey": "sectionExplainers",
+      "blockType": "explainer",
+      "title": "events",
+      "subtitle": "Events, Workshops & Halqahs",
+      "content": "Participate in live masterclasses, parenting workshops, and sisterhood meetups organized across all Muhsina wings.",
+      "order": 7,
+      "isPublished": true,
+      "metadata": {
+        "howItWorks": [
+          "Direct online registration and digital ticketing",
+          "Access recordings and downloadable presentation decks in the past event archives"
+        ]
+      }
+    },
+    {
+      "sectionKey": "sectionExplainers",
+      "blockType": "explainer",
+      "title": "resources",
+      "subtitle": "Curated Resource Library",
+      "content": "An open treasury of authentic Islamic articles, parenting worksheets, halal business templates, and multimedia lectures.",
+      "order": 8,
+      "isPublished": true,
+      "metadata": {
+        "howItWorks": [
+          "Content reviewed and vetted by sisters with subject-matter expertise",
+          "Free downloadable PDFs and educational study materials"
+        ]
+      }
+    },
+    {
+      "sectionKey": "whoWeAre",
+      "blockType": "info",
+      "title": "Our Covenant of Trust & Core Principles",
+      "subtitle": "Amanah, Ukhuwwah, Ihsan, Nasiha",
+      "content": "BDSisters operates on four foundational Islamic principles that preserve dignity, safety, and mutual support across our community.",
+      "order": 1,
+      "isPublished": true,
+      "metadata": {
+        "principles": [
+          { "name": "Amanah (Trust)", "desc": "Safeguarding sister privacy, data integrity, and ethical business dealings." },
+          { "name": "Ukhuwwah (Sisterhood)", "desc": "Unconditional empathy, non-judgmental encouragement, and sincere solidarity." },
+          { "name": "Ihsan (Excellence)", "desc": "Striving for spiritual, intellectual, and professional excellence in every endeavor." },
+          { "name": "Nasiha (Sincere Counsel)", "desc": "Offering gentle guidance, constructive feedback, and mutual mentorship." }
+        ]
+      }
+    }
+  ],
+  "featuredProducts": [
+    {
+      "brandName": "Rawdah Botanicals",
+      "title": "Premium Organic Rose Infused Herbal Facial Mist",
+      "description": "Distilled from hand-picked organic roses and infused with hydrating herbal extracts to revitalize skin naturally.",
+      "category": "Product",
+      "mrpPrice": 850,
+      "salePrice": 720,
+      "wholesalePrice": 550,
+      "isWholesaleEligible": true,
+      "stock": 50,
+      "productRating": 4.9,
+      "brandRating": 4.9,
+      "totalReviews": 38,
+      "images": ["https://images.unsplash.com/photo-1620916566398-39f1143ab7be?auto=format&fit=crop&w=600&q=80"]
+    },
+    {
+      "brandName": "Haya & Co.",
+      "title": "Modest Luxury Chiffon Hijab Collection (Set of 3)",
+      "description": "Crafted from breathable, opaque premium chiffon in timeless neutral tones with non-slip texture.",
+      "category": "Product",
+      "mrpPrice": 1650,
+      "salePrice": 1390,
+      "wholesalePrice": 1050,
+      "isWholesaleEligible": true,
+      "stock": 40,
+      "productRating": 5.0,
+      "brandRating": 5.0,
+      "totalReviews": 64,
+      "images": ["https://images.unsplash.com/photo-1584917865442-de89df76afd3?auto=format&fit=crop&w=600&q=80"]
+    },
+    {
+      "brandName": "Fitrah Nurture",
+      "title": "1-on-1 Islamic Homeschooling Curriculum Strategy (1 Month)",
+      "description": "Personalized consultation and weekly guidance for mothers navigating homeschooling in Bangladesh with Circle of Parents mentorship.",
+      "category": "Service",
+      "mrpPrice": 3500,
+      "salePrice": 2800,
+      "wholesalePrice": 2800,
+      "isWholesaleEligible": false,
+      "stock": 10,
+      "productRating": 4.95,
+      "brandRating": 4.95,
+      "totalReviews": 29,
+      "images": ["https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=600&q=80"]
+    },
+    {
+      "brandName": "Qalam & Ink Studio",
+      "title": "Handbound Islamic Daily Reflection & Tadabbur Journal",
+      "description": "A luxury foil-stamped undated planner designed to balance daily prayers, Quran goals, household tasks, and professional milestones.",
+      "category": "Product",
+      "mrpPrice": 950,
+      "salePrice": 799,
+      "wholesalePrice": 580,
+      "isWholesaleEligible": true,
+      "stock": 60,
+      "productRating": 4.88,
+      "brandRating": 4.9,
+      "totalReviews": 42,
+      "images": ["https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?auto=format&fit=crop&w=600&q=80"]
+    },
+    {
+      "brandName": "Shifaa Holistic",
+      "title": "Cold-Pressed Ethiopian Black Seed & Organic Raw Honey Elixir",
+      "description": "100% pure cold-pressed Nigella Sativa oil blended with wild Sundarbans raw honey for immune health and vitality.",
+      "category": "Product",
+      "mrpPrice": 1350,
+      "salePrice": 1150,
+      "wholesalePrice": 850,
+      "isWholesaleEligible": true,
+      "stock": 35,
+      "productRating": 4.96,
+      "brandRating": 4.95,
+      "totalReviews": 53,
+      "images": ["https://images.unsplash.com/photo-1587049352846-4a222e784d38?auto=format&fit=crop&w=600&q=80"]
+    },
+    {
+      "brandName": "Noor Studio",
+      "title": "Halal Brand Identity & Modest Packaging Design (Sister-to-Sister)",
+      "description": "Full visual branding package including typography, brand guidelines, color palettes, and print-ready packaging templates.",
+      "category": "Service",
+      "mrpPrice": 3200,
+      "salePrice": 2450,
+      "wholesalePrice": 1950,
+      "isWholesaleEligible": true,
+      "stock": 8,
+      "productRating": 4.92,
+      "brandRating": 4.9,
+      "totalReviews": 31,
+      "images": ["https://images.unsplash.com/photo-1542744094-3a31727221eb?auto=format&fit=crop&w=600&q=80"]
+    }
+  ],
+  "forumPosts": [
+    {
+      "wingName": "FaithAndGrowth",
+      "content": "How to maintain spiritual consistency in busy seasons of motherhood and business?\n\nAs sisters managing both household responsibilities and entrepreneurial projects, spiritual burnout can subtly creep in. In this reflection, I want to discuss small, micro-habits of Dhikr and Quran recitation that transformed my day. What routines work best for your morning Barakah hours?",
+      "mediaUrls": []
+    },
+    {
+      "wingName": "FamilyAndParenting",
+      "content": "Practical approaches to screen-free early childhood routines in Bangladesh.\n\nAssalamu Alaikum sisters. Living in urban apartments makes physical play challenging. Here is how our homeschooling circle created rotating sensory bins and indoor active play corners with local, inexpensive materials. Would love to swap ideas on Montessori-aligned Bangla learning activities!",
+      "mediaUrls": []
+    },
+    {
+      "wingName": "SistersInBusiness",
+      "content": "Pricing your artisanal products without compromising MRP or sisterhood fairness.\n\nMany of us struggle with under-pricing our handmade goods out of shyness. Let us talk about cost-of-goods-sold (COGS), labor calculation, and how BDSisters platform rules ensure our MRP stays competitive while honoring our labor and dignity.",
+      "mediaUrls": []
+    },
+    {
+      "wingName": "SkillsExchange",
+      "content": "Offering: Graphic Design & Branding Kit | Seeking: Spoken Arabic Conversation Practice.\n\nBismillah. I have 6 years of experience in Figma, Canva Pro, and packaging design. I would love to design brand identity assets for a sister in exchange for weekly Conversational Modern Standard Arabic practice.",
+      "mediaUrls": []
+    }
+  ],
+  "upcomingEvents": [
+    {
+      "title": "Tadabbur for Busy Sisters: Connecting with Surah Al-Kahf",
+      "description": "Weekly deep-dive into the reflections, warnings, and spiritual anchors of Surah Al-Kahf with Ustadha Rubaba Khan.",
+      "date": "2026-11-28T10:00:00.000Z",
+      "time": "4:00 PM - 5:30 PM (BST)",
+      "locationType": "Online",
+      "locationDetails": "Google Meet (Link emailed upon registration)",
+      "ticketPrice": 0,
+      "maxAttendees": 100,
+      "bannerUrl": "https://images.unsplash.com/photo-1519817650390-64a93db51149?auto=format&fit=crop&w=600&q=80"
+    },
+    {
+      "title": "Halal E-Commerce Masterclass: From Home Kitchen to Brand Registry",
+      "description": "Practical workshop on cost accounting, food hygiene certifications, modest branding, and dispatch logistics for sisters.",
+      "date": "2026-12-04T13:30:00.000Z",
+      "time": "7:30 PM - 9:30 PM (BST)",
+      "locationType": "Online",
+      "locationDetails": "Zoom Masterclass Room",
+      "ticketPrice": 500,
+      "maxAttendees": 50,
+      "bannerUrl": "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?auto=format&fit=crop&w=600&q=80"
+    },
+    {
+      "title": "Parenting in the Digital Era: Building Children's Moral Immune System",
+      "description": "Comprehensive psychological and Islamic framework for raising resilient, morally grounded children in screen-heavy environments.",
+      "date": "2026-12-13T04:30:00.000Z",
+      "time": "10:30 AM - 12:30 PM (BST)",
+      "locationType": "Online",
+      "locationDetails": "Live Webinar Room",
+      "ticketPrice": 0,
+      "maxAttendees": 150,
+      "bannerUrl": "https://images.unsplash.com/photo-1491438590914-bc09fcaaf77a?auto=format&fit=crop&w=600&q=80"
+    }
+  ],
+  "curatedResources": [
+    {
+      "title": "The Holistic Islamic Development Framework: Sister's Habit Compass",
+      "slug": "holistic-islamic-development-framework",
+      "type": "Downloadable",
+      "category": "Spiritual Growth",
+      "description": "An interactive, printable habit and worship journal mapping spiritual milestones, Quranic reflections, and daily Barakah habits.",
+      "content": "Full habit guide with weekly evaluation rubrics and sister accountability circles.",
+      "fileUrl": "https://bdsisters.org/resources/habit-compass.pdf",
+      "tags": ["Spiritual", "Productivity", "Habits", "PDF"],
+      "accessLevel": "Public",
+      "downloadCount": 1420
+    },
+    {
+      "title": "Halal Business Compliance Checklist & Fair MRP Guide",
+      "slug": "halal-business-compliance-checklist-mrp-guide",
+      "type": "Downloadable",
+      "category": "Business & Entrepreneurship",
+      "description": "Essential legal, Islamic, and financial checklist for sisters launching artisanal or commercial brands in Bangladesh.",
+      "content": "Covers COGS calculation, ethical pricing formulas, and consumer protection ethics.",
+      "fileUrl": "https://bdsisters.org/resources/mrp-guide.pdf",
+      "tags": ["Commerce", "Business", "Halal", "Worksheet"],
+      "accessLevel": "Public",
+      "downloadCount": 980
+    },
+    {
+      "title": "Preschool to Grade 5 Homeschooling Routine Blueprints",
+      "slug": "preschool-grade5-homeschooling-blueprints",
+      "type": "Downloadable",
+      "category": "Parenting & Education",
+      "description": "Turnkey timetable templates, Bangla phonics charts, and Islamic studies lesson plans designed by Circle of Parents.",
+      "content": "Contains age-graded timetables, active play strategies, and book lists.",
+      "fileUrl": "https://bdsisters.org/resources/homeschool-blueprints.pdf",
+      "tags": ["Parenting", "Homeschooling", "Education", "CoP"],
+      "accessLevel": "Public",
+      "downloadCount": 2310
+    },
+    {
+      "title": "Mastering Vocational Skill Bars & Professional Portfolio Presentation",
+      "slug": "vocational-skills-portfolio-presentation",
+      "type": "Video",
+      "category": "Skills & Career",
+      "description": "42-minute video masterclass explaining how to showcase technical and creative capabilities with privacy safeguards.",
+      "content": "Detailed overview of creating a professional CV without exposing sensitive private contact info.",
+      "videoUrl": "https://www.youtube.com/watch?v=sample-video",
+      "tags": ["Career", "Skills", "Portfolio", "Video"],
+      "accessLevel": "Public",
+      "downloadCount": 1840
+    }
+  ],
+  "masterLookups": [
+    { "type": "subjects", "genreOrCategory": "Islamic Knowledge", "name": "Islamic Studies & Aqeedah" },
+    { "type": "subjects", "genreOrCategory": "Islamic Knowledge", "name": "Tafseer & Hadith Sciences" },
+    { "type": "subjects", "genreOrCategory": "Islamic Knowledge", "name": "Fiqh of Women & Family" },
+    { "type": "subjects", "genreOrCategory": "Islamic Knowledge", "name": "Fiqh of Halal Commerce" },
+    { "type": "subjects", "genreOrCategory": "Languages", "name": "Classical Arabic Grammar" },
+    { "type": "subjects", "genreOrCategory": "Languages", "name": "Conversational Arabic" },
+    { "type": "subjects", "genreOrCategory": "Parenting", "name": "Early Childhood Development" },
+    { "type": "subjects", "genreOrCategory": "Parenting", "name": "Homeschooling Pedagogy" },
+    { "type": "subjects", "genreOrCategory": "Health", "name": "Holistic Nutrition & Herbal Medicine" },
+    { "type": "subjects", "genreOrCategory": "Health", "name": "Postpartum Mental Health" },
+    { "type": "software", "genreOrCategory": "Design & UI", "name": "Figma" },
+    { "type": "software", "genreOrCategory": "Design & UI", "name": "Canva Pro" },
+    { "type": "software", "genreOrCategory": "Design & UI", "name": "Adobe Photoshop" },
+    { "type": "software", "genreOrCategory": "Design & UI", "name": "Adobe Illustrator" },
+    { "type": "software", "genreOrCategory": "Productivity", "name": "Notion" },
+    { "type": "software", "genreOrCategory": "Productivity", "name": "Microsoft Excel & Google Sheets" },
+    { "type": "software", "genreOrCategory": "Development", "name": "Next.js & React" },
+    { "type": "software", "genreOrCategory": "Development", "name": "WordPress & WooCommerce" },
+    { "type": "vocationalSkills", "genreOrCategory": "Apparel & Textiles", "name": "Modest Pattern Making & Tailoring" },
+    { "type": "vocationalSkills", "genreOrCategory": "Apparel & Textiles", "name": "Hand Embroidery & Nakshi Kantha" },
+    { "type": "vocationalSkills", "genreOrCategory": "Cosmetics & Herbal", "name": "Handcrafted Organic Soap Making" },
+    { "type": "vocationalSkills", "genreOrCategory": "Cosmetics & Herbal", "name": "Cold-Pressed Botanical Formulations" },
+    { "type": "vocationalSkills", "genreOrCategory": "Culinary & Baking", "name": "Artisanal Sourdough & Halal Baking" },
+    { "type": "vocationalSkills", "genreOrCategory": "Arts & Crafts", "name": "Arabic Calligraphy & Illumination" },
+    { "type": "vocationalSkills", "genreOrCategory": "Business Services", "name": "Brand Strategy & Packaging Design" },
+    { "type": "vocationalSkills", "genreOrCategory": "Business Services", "name": "Virtual Assistance & Store Management" },
+    { "type": "vocationalSkills", "genreOrCategory": "Media & Writing", "name": "Academic Translation & Proofreading" },
+    { "type": "socialIcons", "genreOrCategory": "Platforms", "name": "Website" },
+    { "type": "socialIcons", "genreOrCategory": "Platforms", "name": "LinkedIn" },
+    { "type": "socialIcons", "genreOrCategory": "Platforms", "name": "Facebook" },
+    { "type": "socialIcons", "genreOrCategory": "Platforms", "name": "Instagram" },
+    { "type": "socialIcons", "genreOrCategory": "Platforms", "name": "YouTube" },
+    { "type": "socialIcons", "genreOrCategory": "Platforms", "name": "WhatsApp" },
+    { "type": "socialIcons", "genreOrCategory": "Platforms", "name": "Telegram" },
+    { "type": "businessRoles", "genreOrCategory": "Leadership", "name": "Founder & Owner" },
+    { "type": "businessRoles", "genreOrCategory": "Leadership", "name": "Co-Founder & Creative Director" },
+    { "type": "businessRoles", "genreOrCategory": "Artisans", "name": "Lead Artisan & Maker" },
+    { "type": "businessRoles", "genreOrCategory": "Consulting", "name": "Certified Consultant & Mentor" }
+  ]
+}

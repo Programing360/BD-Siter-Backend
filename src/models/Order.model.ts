@@ -11,6 +11,7 @@ export interface IOrderItem {
 }
 
 export interface IOrder extends Document {
+  orderNumber: string;
   buyerId: Types.ObjectId; // Linked to User model
   orderItems: IOrderItem[];
   totalAmount: number;
@@ -32,6 +33,12 @@ export interface IOrder extends Document {
 
 const OrderSchema = new Schema<IOrder>(
   {
+    orderNumber: {
+      type: String,
+      unique: true,
+      sparse: true,
+      default: () => `BDS-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`,
+    },
     buyerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     orderItems: [
       {
@@ -73,6 +80,15 @@ const OrderSchema = new Schema<IOrder>(
   { timestamps: true }
 );
 
+// Pre-save hook: ensure orderNumber is always populated
+OrderSchema.pre("save", function () {
+  const doc = this as unknown as IOrder;
+  if (!doc.orderNumber) {
+    doc.orderNumber = `BDS-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  }
+});
+
+OrderSchema.index({ orderNumber: 1 }, { unique: true, sparse: true });
 OrderSchema.index({ buyerId: 1 });
 OrderSchema.index({ paymentStatus: 1 });
 OrderSchema.index({ orderStatus: 1 });
@@ -80,3 +96,10 @@ OrderSchema.index({ "orderItems.sellerId": 1 });
 OrderSchema.index({ transactionId: 1 });
 
 export const Order = model<IOrder>("Order", OrderSchema);
+
+// Safe background cleanup: ensure any legacy unique id_1 or non-sparse orderNumber_1 index is permanently dropped
+Order.collection
+  .dropIndex("id_1")
+  .catch(() => {
+    // Ignore if index doesn't exist
+  });

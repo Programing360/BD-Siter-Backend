@@ -313,3 +313,6 @@ export const authorizeRoles = (...allowedRoles: string[]) => {
     next();
   };
 };
+
+// Alias for standard authentication guard
+export const protect = verifyToken;

@@ -41,7 +41,18 @@ export const getResources = async (
       filter.accessLevel = { $in: ["Public", "Member", "PaidMember"] };
     } // Admin has no accessLevel filter
 
-    if (req.query.type) filter.type = req.query.type;
+    if (req.query.type) {
+      if (req.query.type === "Publication") {
+        filter.$or = [
+          { type: { $in: ["Downloadable", "Article"] } },
+          { wing: "TSPP" },
+          { category: /publication/i },
+        ];
+      } else {
+        filter.type = req.query.type;
+      }
+    }
+    if (req.query.wing) filter.wing = req.query.wing;
     if (req.query.category) filter.category = req.query.category;
     if (req.query.tag) filter.tags = req.query.tag;
 
@@ -149,18 +160,30 @@ export const createResource = async (
       return;
     }
 
-    const { slug } = validationResult.data;
-    const existing = await ResourceLibrary.findOne({ slug });
-    if (existing) {
-      res.status(400).json({
-        success: false,
-        message: `Resource with slug "${slug}" already exists.`,
-      });
-      return;
+    const data = validationResult.data;
+    let slug = data.slug;
+    if (!slug) {
+      slug = data.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
     }
 
+    let uniqueSlug = slug;
+    let counter = 1;
+    while (await ResourceLibrary.findOne({ slug: uniqueSlug })) {
+      uniqueSlug = `${slug}-${counter}`;
+      counter++;
+    }
+
+    const type = data.type || data.format || "Downloadable";
+    const format = data.format || data.type || "Downloadable";
+
     const resource = await ResourceLibrary.create({
-      ...validationResult.data,
+      ...data,
+      slug: uniqueSlug,
+      type,
+      format,
       authorId: req.user?.id,
     });
 
@@ -190,9 +213,13 @@ export const updateResource = async (
       return;
     }
 
+    const updateData: any = { ...validationResult.data };
+    if (updateData.type && !updateData.format) updateData.format = updateData.type;
+    if (updateData.format && !updateData.type) updateData.type = updateData.format;
+
     const resource = await ResourceLibrary.findByIdAndUpdate(
       id,
-      { $set: validationResult.data },
+      { $set: updateData },
       { new: true }
     );
 
@@ -234,16 +261,24 @@ export const deleteResource = async (
   }
 };
 
-// ─── 6. Track Resource Download Count ─────────────────────────────────────────
+// ─── 6. Track Resource Download / View Count ──────────────────────────────────
 export const trackDownload = async (
   req: Request,
   res: Response
 ): Promise<void> => {
   try {
     const id = getParam(req.params.id);
+
+    // Atomically increment downloadCount, downloadsCount, and downloadsOrReads
     const resource = await ResourceLibrary.findByIdAndUpdate(
       id,
-      { $inc: { downloadCount: 1 } },
+      {
+        $inc: {
+          downloadCount: 1,
+          downloadsCount: 1,
+          downloadsOrReads: 1,
+        },
+      },
       { new: true }
     );
 
@@ -252,9 +287,23 @@ export const trackDownload = async (
       return;
     }
 
+    const currentCount = Number(
+      resource.downloadsOrReads ?? resource.downloadsCount ?? resource.downloadCount ?? 1
+    );
+
     res.status(200).json({
       success: true,
-      downloadCount: resource.downloadCount,
+      message: "Resource access tracked successfully.",
+      data: {
+        _id: resource._id,
+        fileUrl: resource.fileUrl || resource.videoUrl,
+        downloadCount: currentCount,
+        downloadsCount: currentCount,
+        downloadsOrReads: currentCount,
+      },
+      downloadCount: currentCount,
+      downloadsCount: currentCount,
+      downloadsOrReads: currentCount,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });

@@ -6,6 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "seed": "ts-node src/seed/seedDatabase.ts",
     "start": "node dist/server.js",
     "build": "tsc",
     "lint": "eslint . --ext .ts",
@@ -16,6 +17,7 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@types/multer": "^2.3.0",
     "@types/pdfmake": "^0.3.3",
     "@types/swagger-ui-express": "^4.1.8",
     "axios": "^1.21.1",
@@ -30,6 +32,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.12.1",
     "morgan": "^1.12.1",
+    "multer": "^2.5.0",
     "nodemailer": "^10.5.0",
     "pdfmake": "^0.3.14",
     "resend": "^6.38.1",

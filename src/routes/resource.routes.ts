@@ -18,6 +18,7 @@ const router = Router();
 // Public & member access
 router.get("/", optionalAuth, getResources);
 router.get("/:id", optionalAuth, getResourceById);
+router.get("/:id/download", trackDownload);
 router.post("/:id/download", trackDownload);
 
 // Admin / staff management

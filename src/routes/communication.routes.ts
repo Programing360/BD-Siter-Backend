@@ -13,6 +13,7 @@ const router = Router();
 
 // Public routes
 router.post("/contact", submitContactForm);
+router.post("/newsletter", subscribeNewsletter);
 router.post("/newsletter/subscribe", subscribeNewsletter);
 router.post("/newsletter/unsubscribe", unsubscribeNewsletter);
 

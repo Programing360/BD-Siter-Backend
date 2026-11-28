@@ -5,7 +5,7 @@ export interface IPayment extends Document {
   invoiceId?: string; // ZiniPay invoice ID (INV-...)
   gateway: string; // "ZiniPay"
   userId: Types.ObjectId;
-  paymentType: "BusinessSubscription" | "Order" | "EventTicket";
+  paymentType: "BusinessSubscription" | "Order" | "EventTicket" | "PaidMembership";
   referenceId: string; // businessId, orderId, or eventId
   amount: number;
   currency: string;
@@ -25,7 +25,7 @@ const PaymentSchema = new Schema<IPayment>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     paymentType: {
       type: String,
-      enum: ["BusinessSubscription", "Order", "EventTicket"],
+      enum: ["BusinessSubscription", "Order", "EventTicket", "PaidMembership"],
       required: true,
     },
     referenceId: { type: String, required: true },

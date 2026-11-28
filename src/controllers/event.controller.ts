@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { Event } from "../models/Event.model";
 import {
   createEventSchema,
+  updateEventSchema,
   eventRegistrationSchema,
   archiveEventSchema,
 } from "../validations/event.validation";
@@ -33,8 +34,14 @@ export const createEvent = async (
       return;
     }
 
+    const data = validationResult.data;
+    const ticketPrice = Number(data.ticketPrice) || 0;
+    const isFree = data.isFree !== undefined ? Boolean(data.isFree) : ticketPrice === 0;
+
     const newEvent = new Event({
-      ...validationResult.data,
+      ...data,
+      ticketPrice: isFree ? 0 : ticketPrice,
+      isFree,
       organizerId,
     });
     await newEvent.save();
@@ -66,7 +73,8 @@ export const getEvents = async (req: Request, res: Response): Promise<void> => {
     }
 
     const events = await Event.find(query)
-      .populate("organizerId", "fullName profilePicture role")
+      .populate("organizerId", "fullName profilePicture role email")
+      .populate("registeredAttendees", "fullName profilePicture email location referralCode")
       .sort({ date: filterType === "past" ? -1 : 1 });
 
     res.status(200).json({
@@ -86,10 +94,9 @@ export const getEventById = async (
 ): Promise<void> => {
   try {
     const id = getParam(req.params.id);
-    const event = await Event.findById(id).populate(
-      "organizerId",
-      "fullName profilePicture role"
-    );
+    const event = await Event.findById(id)
+      .populate("organizerId", "fullName profilePicture role email")
+      .populate("registeredAttendees", "fullName profilePicture email location referralCode");
 
     if (!event) {
       res.status(404).json({ success: false, message: "Event not found." });
@@ -102,7 +109,41 @@ export const getEventById = async (
   }
 };
 
-// ─── 4. Register / RSVP for an Event ──────────────────────────────────────────
+// ─── 4b. Get Logged-In User Registrations ─────────────────────────────────
+export const getMyRegistrations = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: "Authentication required." });
+      return;
+    }
+
+    const registeredEvents = await Event.find({
+      registeredAttendees: userId,
+      isCancelled: false,
+    }).sort({ date: 1 });
+
+    const data = registeredEvents.map((ev) => {
+      const ticketCode = `BDS-PASS-${ev._id.toString().slice(-4).toUpperCase()}-${userId.slice(-4).toUpperCase()}`;
+      return {
+        ...ev.toObject(),
+        ticketCode,
+        isUserRegistered: true,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      count: data.length,
+      data,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
 export const registerForEvent = async (
   req: AuthenticatedRequest,
   res: Response
@@ -155,15 +196,23 @@ export const registerForEvent = async (
       return;
     }
 
-    // Check if already registered
     const isAlreadyRegistered = event.registeredAttendees.some(
       (attendeeId) => attendeeId.toString() === userId
     );
 
+    const ticketCode = `BDS-PASS-${eventId.slice(-4).toUpperCase()}-${userId.slice(-4).toUpperCase()}`;
+
     if (isAlreadyRegistered) {
-      res.status(400).json({
-        success: false,
+      res.status(200).json({
+        success: true,
+        alreadyRegistered: true,
         message: "You are already registered for this event.",
+        ticketCode,
+        data: {
+          ...event.toObject(),
+          ticketCode,
+          isUserRegistered: true,
+        },
       });
       return;
     }
@@ -174,14 +223,19 @@ export const registerForEvent = async (
     res.status(200).json({
       success: true,
       message: "Successfully registered for the event!",
-      data: event,
+      ticketCode,
+      data: {
+        ...event.toObject(),
+        ticketCode,
+        isUserRegistered: true,
+      },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: (error as Error).message });
   }
 };
 
-// ─── 5. Cancel Event (DELETE /api/events/:id) ──────────────────────────────────
+// ─── 5. Cancel or Delete Event (DELETE /api/events/:id) ──────────────────────
 export const cancelEvent = async (
   req: AuthenticatedRequest,
   res: Response
@@ -202,7 +256,17 @@ export const cancelEvent = async (
     if (!isOrganizer && !isAdmin) {
       res.status(403).json({
         success: false,
-        message: "Access denied. Only the organizer or admin can cancel this event.",
+        message: "Access denied. Only the organizer or admin can manage this event.",
+      });
+      return;
+    }
+
+    const permanent = req.query.permanent === "true";
+    if (permanent && isAdmin) {
+      await Event.findByIdAndDelete(id);
+      res.status(200).json({
+        success: true,
+        message: "Event permanently removed.",
       });
       return;
     }
@@ -213,6 +277,80 @@ export const cancelEvent = async (
     res.status(200).json({
       success: true,
       message: "Event has been cancelled successfully.",
+      data: event,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
+
+// ─── 5b. Update Event (PATCH /api/events/:id) ─────────────────────────────────
+export const updateEvent = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const id = getParam(req.params.id);
+    const validationResult = updateEventSchema.safeParse(req.body);
+
+    if (!validationResult.success) {
+      res
+        .status(400)
+        .json({ success: false, errors: validationResult.error.format() });
+      return;
+    }
+
+    const event = await Event.findById(id);
+    if (!event) {
+      res.status(404).json({ success: false, message: "Event not found." });
+      return;
+    }
+
+    const isOrganizer = event.organizerId.toString() === req.user?.id;
+    const isAdmin =
+      req.user?.role === "Admin" || req.user?.role === "SuperAdmin";
+
+    if (!isOrganizer && !isAdmin) {
+      res.status(403).json({
+        success: false,
+        message: "Access denied. Only the organizer or admin can update this event.",
+      });
+      return;
+    }
+
+    const data = validationResult.data;
+    if (data.title !== undefined) event.title = data.title;
+    if (data.description !== undefined) event.description = data.description;
+    if (data.wing !== undefined) event.wing = data.wing;
+    if (data.eventType !== undefined) event.eventType = data.eventType;
+    if (data.speaker !== undefined) event.speaker = data.speaker;
+    if (data.date !== undefined) event.date = new Date(data.date);
+    if (data.time !== undefined) event.time = data.time;
+    if (data.locationType !== undefined) event.locationType = data.locationType;
+    if (data.locationDetails !== undefined) event.locationDetails = data.locationDetails;
+    if (data.bannerUrl !== undefined) event.bannerUrl = data.bannerUrl;
+    if (data.ticketPrice !== undefined) {
+      event.ticketPrice = Number(data.ticketPrice) || 0;
+      event.isFree = event.ticketPrice === 0;
+    }
+    if (data.isFree !== undefined) {
+      event.isFree = Boolean(data.isFree);
+      if (event.isFree) event.ticketPrice = 0;
+    }
+    if (data.maxAttendees !== undefined) event.maxAttendees = data.maxAttendees;
+    if (data.isPast !== undefined) event.isPast = Boolean(data.isPast);
+    if (data.isCancelled !== undefined) event.isCancelled = Boolean(data.isCancelled);
+    if (data.recordingUrl !== undefined) event.recordingUrl = data.recordingUrl;
+    if (data.slidesUrl !== undefined) event.slidesUrl = data.slidesUrl;
+    if (data.summaryNotes !== undefined) event.summaryNotes = data.summaryNotes;
+
+    await event.save();
+    await event.populate("organizerId", "fullName profilePicture role email");
+    await event.populate("registeredAttendees", "fullName profilePicture email location referralCode");
+
+    res.status(200).json({
+      success: true,
+      message: "Event updated successfully.",
       data: event,
     });
   } catch (error) {
@@ -255,6 +393,15 @@ export const archiveEvent = async (
     }
 
     event.isPast = true;
+    if (validationResult.data.recordingUrl !== undefined) {
+      event.recordingUrl = validationResult.data.recordingUrl;
+    }
+    if (validationResult.data.slidesUrl !== undefined) {
+      event.slidesUrl = validationResult.data.slidesUrl;
+    }
+    if (validationResult.data.summaryNotes !== undefined) {
+      event.summaryNotes = validationResult.data.summaryNotes;
+    }
     if (validationResult.data.archiveMedia) {
       event.archiveMedia = validationResult.data.archiveMedia;
     }

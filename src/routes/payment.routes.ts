@@ -4,15 +4,20 @@ import {
   verifyZiniPayPayment,
   ziniPayWebhook,
   ziniPayCancel,
+  getUserInvoices,
   initPayment,
   paymentSuccess,
   paymentFail,
   paymentCancel,
   paymentIpn,
 } from "../controllers/payment.controller";
-import { optionalAuth } from "../middlewares/auth.middleware";
+import { optionalAuth, protect } from "../middlewares/auth.middleware";
 
 const router = Router();
+
+// ─── User Invoices ─────────────────────────────────────────────
+router.get("/zinipay/invoices", protect, getUserInvoices);
+router.get("/invoices", protect, getUserInvoices);
 
 // ─── ZiniPay Dedicated Endpoints ──────────────────────────────
 router.post("/zinipay/init", optionalAuth, initZiniPayPayment);

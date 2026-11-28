@@ -37,6 +37,7 @@ import communicationRoutes from "./routes/communication.routes";
 import resourceRoutes from "./routes/resource.routes";
 import goalRoutes from "./routes/goal.routes";
 import integrationRoutes from "./routes/integration.routes";
+import reviewRoutes from "./routes/review.routes";
 
 // Middlewares & Docs
 import { swaggerDocument } from "./docs/swagger";
@@ -46,10 +47,19 @@ import {
   mongoSanitizer,
 } from "./middlewares/rateLimiter";
 import uploadRouter from "./routes/upload.route";
+import { seedIfEmpty } from "./seed/seedDatabase";
 
-// Connect to MongoDB
-connectDB();
+// Connect to MongoDB and seed default platform data if empty
+connectDB().then(() => {
+  seedIfEmpty().catch((err) => {
+    console.error("Non-fatal: initial database seeding failed:", err);
+  });
+}).catch((err) => {
+  console.error("MongoDB connection error:", err);
+});
+
 const app: Application = express();
+app.set("trust proxy", 1);
 const PORT = process.env.PORT || 5000;
 
 // CORS configuration (restricted to configured frontend URL and local dev)
@@ -94,11 +104,15 @@ app.use("/api/payment/init", paymentLimiter);
 
 // Mounted Routes
 app.use("/api/business", businessRoutes);
+app.use("/api/businesses", businessRoutes);
+app.use("/api/reviews", reviewRoutes);
 app.use("/api/ecommerce", ecommerceRoutes);
+app.use("/api/cart", ecommerceRoutes);
 app.use("/api/forum", forumRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/payment", paymentRoutes);
+app.use("/api/invoices", paymentRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/cms", cmsRoutes);
 app.use("/api/notifications", notificationRoutes);

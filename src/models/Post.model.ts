@@ -28,11 +28,18 @@ export interface IPostReport {
 export interface IPost extends Document {
   authorId: Types.ObjectId;
   wingName: WingNameType;
+  title?: string;
   content: string;
   mediaUrls: string[];
   likes: Types.ObjectId[];
+  views: number;
+  viewCount: number;
+  isAnonymous: boolean;
+  tags: string[];
   comments: Types.DocumentArray<IPostComment & Types.Subdocument>;
   isDeleted: boolean;
+  isHidden: boolean;
+  isLocked: boolean;
   reportCount: number;
   reports: IPostReport[];
   createdAt: Date;
@@ -48,9 +55,14 @@ const PostSchema = new Schema<IPost>(
       required: true,
       default: "General",
     },
+    title: { type: String, maxlength: 300 },
     content: { type: String, required: true, maxlength: 2000 },
     mediaUrls: [{ type: String }],
     likes: [{ type: Schema.Types.ObjectId, ref: "User" }],
+    views: { type: Number, default: 0 },
+    viewCount: { type: Number, default: 0 },
+    isAnonymous: { type: Boolean, default: false },
+    tags: [{ type: String }],
     comments: [
       {
         commenterId: {
@@ -63,6 +75,8 @@ const PostSchema = new Schema<IPost>(
       },
     ],
     isDeleted: { type: Boolean, default: false },
+    isHidden: { type: Boolean, default: false },
+    isLocked: { type: Boolean, default: false },
     reportCount: { type: Number, default: 0 },
     reports: [
       {
@@ -82,5 +96,7 @@ const PostSchema = new Schema<IPost>(
 PostSchema.index({ wingName: 1 });
 PostSchema.index({ createdAt: -1 });
 PostSchema.index({ isDeleted: 1 });
+PostSchema.index({ isHidden: 1 });
+PostSchema.index({ reportCount: -1 });
 
 export const Post = model<IPost>("Post", PostSchema);

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { CmsPage, IContentBlock } from "../models/CmsPage.model";
+import { CmsBlock } from "../models/CmsBlock.model";
 import { logAdminAction } from "../models/AuditLog.model";
 import {
   createCmsPageSchema,
@@ -7,6 +8,8 @@ import {
   createContentBlockSchema,
   updateContentBlockSchema,
   reorderBlocksSchema,
+  createCmsBlockSchema,
+  updateCmsBlockSchema,
 } from "../validations/cms.validation";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import { MasterLookup, LookupType } from "../models/MasterLookup.model";
@@ -27,9 +30,9 @@ export const getNavigationMenu = async (
   try {
     const navItems = await CmsPage.find({
       isPublished: true,
-      showInNav: true,
+      $or: [{ showInHeader: true }, { showInNav: true }],
     })
-      .select("slug title navLabel navOrder")
+      .select("slug title navLabel navOrder showInHeader showInNav")
       .sort({ navOrder: 1, title: 1 });
 
     res.status(200).json({
@@ -48,7 +51,7 @@ export const getPublishedPages = async (
 ): Promise<void> => {
   try {
     const pages = await CmsPage.find({ isPublished: true })
-      .select("slug title metaDescription showInNav navLabel navOrder updatedAt")
+      .select("slug title metaDescription showInNav showInHeader navLabel navOrder updatedAt")
       .sort({ navOrder: 1, title: 1 });
 
     res.status(200).json({
@@ -237,7 +240,13 @@ export const updatePage = async (
     if (data.title) page.title = data.title;
     if (data.metaDescription !== undefined) page.metaDescription = data.metaDescription;
     if (data.isPublished !== undefined) page.isPublished = data.isPublished;
-    if (data.showInNav !== undefined) page.showInNav = data.showInNav;
+    if (data.showInHeader !== undefined) {
+      page.showInHeader = data.showInHeader;
+      page.showInNav = data.showInHeader;
+    } else if (data.showInNav !== undefined) {
+      page.showInNav = data.showInNav;
+      page.showInHeader = data.showInNav;
+    }
     if (data.navLabel !== undefined) page.navLabel = data.navLabel;
     if (data.navOrder !== undefined) page.navOrder = data.navOrder;
     page.lastEditedBy = req.user?.id as any;
@@ -534,6 +543,201 @@ export const reorderContentBlocks = async (
 };
 
 
+
+
+// ─── Get All Visible Content Blocks (Public & Dynamic Platform) ──────────
+export const getAllContentBlocks = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const { type, sectionKey, pageSlug, all } = req.query;
+
+    // 1. Query dedicated CmsBlock collection
+    const blockFilter: Record<string, any> = {};
+    if (all !== "true" && !req.originalUrl.includes("/admin")) {
+      blockFilter.isPublished = true;
+    }
+    if (sectionKey) blockFilter.sectionKey = String(sectionKey);
+    if (type) blockFilter.blockType = String(type);
+
+    const dedicatedBlocks = await CmsBlock.find(blockFilter).sort({ order: 1 });
+
+    // 2. Query embedded page blocks for backward compatibility
+    const pageFilter: Record<string, any> = {};
+    if (all !== "true" && !req.originalUrl.includes("/admin")) {
+      pageFilter.isPublished = true;
+    }
+    if (pageSlug) pageFilter.slug = String(pageSlug).toLowerCase();
+
+    const pages = await CmsPage.find(pageFilter);
+    const pageBlocks = pages.flatMap((p) =>
+      p.blocks
+        .filter((b) => b.isVisible)
+        .map((b: any) => ({
+          ...(b.toObject ? b.toObject() : b),
+          sectionKey: b.blockId || "general",
+          blockType: (b as any).blockType || "info",
+          pageSlug: p.slug,
+          pageTitle: p.title,
+        }))
+    );
+
+    const filteredPageBlocks = type
+      ? pageBlocks.filter(
+        (b) => b.blockType?.toLowerCase() === String(type).toLowerCase()
+      )
+      : pageBlocks;
+
+    // Combine dedicated blocks with page blocks
+    const combined = [...dedicatedBlocks, ...filteredPageBlocks];
+
+    res.status(200).json({
+      success: true,
+      count: combined.length,
+      data: combined,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
+
+// ─── CmsBlock CRUD Handlers for Admins ──────────────────────────────────────────
+
+export const getCmsBlockById = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const block = await CmsBlock.findById(req.params.id);
+    if (!block) {
+      res.status(404).json({ success: false, message: "CMS block not found." });
+      return;
+    }
+    res.status(200).json({ success: true, data: block });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
+
+export const createCmsBlock = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const parsed = createCmsBlockSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid CMS block payload.",
+        errors: parsed.error.issues,
+      });
+      return;
+    }
+
+    const newBlock = await CmsBlock.create({
+      ...parsed.data,
+      lastEditedBy: req.user?.id,
+    });
+
+    if (req.user) {
+      await logAdminAction({
+        adminId: req.user.id,
+        action: "CREATE_CMS_BLOCK",
+        targetModel: "CmsBlock",
+        targetId: String(newBlock._id),
+        details: { sectionKey: newBlock.sectionKey, blockType: newBlock.blockType, title: newBlock.title },
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "CMS block created successfully.",
+      data: newBlock,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
+
+export const updateCmsBlock = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const parsed = updateCmsBlockSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid CMS block payload.",
+        errors: parsed.error.issues,
+      });
+      return;
+    }
+
+    const updated = await CmsBlock.findByIdAndUpdate(
+      req.params.id,
+      {
+        ...parsed.data,
+        lastEditedBy: req.user?.id,
+      },
+      { new: true, runValidators: true }
+    );
+
+    if (!updated) {
+      res.status(404).json({ success: false, message: "CMS block not found." });
+      return;
+    }
+
+    if (req.user) {
+      await logAdminAction({
+        adminId: req.user.id,
+        action: "UPDATE_CMS_BLOCK",
+        targetModel: "CmsBlock",
+        targetId: String(updated._id),
+        details: { sectionKey: updated.sectionKey, title: updated.title },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "CMS block updated successfully.",
+      data: updated,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
+
+export const deleteCmsBlock = async (
+  req: AuthenticatedRequest,
+  res: Response
+): Promise<void> => {
+  try {
+    const deleted = await CmsBlock.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      res.status(404).json({ success: false, message: "CMS block not found." });
+      return;
+    }
+
+    if (req.user) {
+      await logAdminAction({
+        adminId: req.user.id,
+        action: "DELETE_CMS_BLOCK",
+        targetModel: "CmsBlock",
+        targetId: String(deleted._id),
+        details: { sectionKey: deleted.sectionKey, title: deleted.title },
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "CMS block deleted successfully.",
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: (error as Error).message });
+  }
+};
 
 
 export const getMasterLookups = async (req: Request, res: Response): Promise<void> => {

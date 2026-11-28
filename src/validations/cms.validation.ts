@@ -10,6 +10,7 @@ export const createCmsPageSchema = z.object({
   metaDescription: z.string().max(500).optional(),
   isPublished: z.boolean().optional().default(false),
   showInNav: z.boolean().optional().default(false),
+  showInHeader: z.boolean().optional().default(false),
   navLabel: z.string().max(50).optional(),
   navOrder: z.number().int().optional().default(0),
 });
@@ -19,6 +20,7 @@ export const updateCmsPageSchema = z.object({
   metaDescription: z.string().max(500).optional(),
   isPublished: z.boolean().optional(),
   showInNav: z.boolean().optional(),
+  showInHeader: z.boolean().optional(),
   navLabel: z.string().max(50).optional(),
   navOrder: z.number().int().optional(),
 });
@@ -66,3 +68,34 @@ export const reorderBlocksSchema = z.object({
     })
   ),
 });
+
+export const createCmsBlockSchema = z.object({
+  sectionKey: z.string().min(1).max(100),
+  blockType: z.string().min(1).max(100),
+  title: z.string().min(1).max(300),
+  subtitle: z.string().max(500).optional(),
+  content: z.string().optional().default(""),
+  order: z.number().int().optional().default(0),
+  isPublished: z.boolean().optional().default(true),
+  imageUrl: z.string().url().or(z.literal("")).optional(),
+  hoverTooltip: z.string().max(1000).optional(),
+  ctaText: z.string().max(100).optional(),
+  ctaLink: z.string().max(500).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
+});
+
+export const updateCmsBlockSchema = z.object({
+  sectionKey: z.string().min(1).max(100).optional(),
+  blockType: z.string().min(1).max(100).optional(),
+  title: z.string().min(1).max(300).optional(),
+  subtitle: z.string().max(500).optional(),
+  content: z.string().optional(),
+  order: z.number().int().optional(),
+  isPublished: z.boolean().optional(),
+  imageUrl: z.string().url().or(z.literal("")).optional(),
+  hoverTooltip: z.string().max(1000).optional(),
+  ctaText: z.string().max(100).optional(),
+  ctaLink: z.string().max(500).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
+});
+

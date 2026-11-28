@@ -65,23 +65,54 @@ export const getUsersDirectory = async (
       return;
     }
 
-    const { page, limit, search, sortBy, sortOrder } = validationResult.data;
+    const { page, limit, search, district, skill, sortBy, sortOrder } = validationResult.data;
 
     // Only active members are shown in public directory
-    const query: any = { status: 'Active' };
+    const queryConditions: any[] = [{ status: 'Active' }];
 
     if (search && search.trim() !== '') {
       const searchRegex = new RegExp(search.trim(), 'i');
-      query.$or = [
-        { fullName: searchRegex },
-        { 'location.district': searchRegex },
-        { 'location.state': searchRegex },
-        { 'location.country': searchRegex },
-        { bio: searchRegex },
-        { 'subjectsOfInterest.subject': searchRegex },
-        { 'vocationalSkills.skill': searchRegex },
-      ];
+      queryConditions.push({
+        $or: [
+          { fullName: searchRegex },
+          { 'location.district': searchRegex },
+          { 'location.state': searchRegex },
+          { 'location.country': searchRegex },
+          { bio: searchRegex },
+          { 'subjectsOfInterest.subject': searchRegex },
+          { 'subjectsOfInterest.genre': searchRegex },
+          { 'vocationalSkills.skill': searchRegex },
+          { 'vocationalSkills.genre': searchRegex },
+          { 'softwareSkills.name': searchRegex },
+        ],
+      });
     }
+
+    if (district && district.trim() !== '') {
+      const districtRegex = new RegExp(district.trim(), 'i');
+      queryConditions.push({
+        $or: [
+          { 'location.district': districtRegex },
+          { 'location.state': districtRegex },
+        ],
+      });
+    }
+
+    if (skill && skill.trim() !== '') {
+      const skillRegex = new RegExp(skill.trim(), 'i');
+      queryConditions.push({
+        $or: [
+          { 'vocationalSkills.skill': skillRegex },
+          { 'vocationalSkills.genre': skillRegex },
+          { 'softwareSkills.name': skillRegex },
+          { 'subjectsOfInterest.subject': skillRegex },
+          { 'subjectsOfInterest.genre': skillRegex },
+        ],
+      });
+    }
+
+    const query =
+      queryConditions.length > 1 ? { $and: queryConditions } : queryConditions[0];
 
     // Chronological / Alphabetical sorting
     const sortField = sortBy || 'fullName';
